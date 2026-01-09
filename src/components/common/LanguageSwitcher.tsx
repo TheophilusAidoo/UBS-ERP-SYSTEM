@@ -8,6 +8,7 @@ import {
 import TranslateIcon from '@mui/icons-material/Translate';
 import { useTranslation } from 'react-i18next';
 import { useLanguageStore } from '../../store/language.store';
+import { useAuthStore } from '../../store/auth.store';
 import { LANGUAGES } from '../../constants';
 import { Language } from '../../types';
 
@@ -18,6 +19,7 @@ interface LanguageSwitcherProps {
 
 const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({ variant = 'outlined', sx }) => {
   const { currentLanguage, setLanguage } = useLanguageStore();
+  const { user } = useAuthStore();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
 
@@ -32,7 +34,8 @@ const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({ variant = 'outlined
   };
 
   const handleLanguageChange = async (lang: Language) => {
-    await setLanguage(lang);
+    // Pass user ID to save language preference per user
+    await setLanguage(lang, user?.id);
     handleClose();
   };
 

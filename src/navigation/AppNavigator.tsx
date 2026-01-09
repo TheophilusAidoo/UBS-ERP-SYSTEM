@@ -65,8 +65,16 @@ const AppNavigator = () => {
 
   useEffect(() => {
     checkAuth();
-    initializeLanguage();
   }, []);
+
+  // Initialize language when user changes
+  useEffect(() => {
+    if (user?.id) {
+      initializeLanguage(user.id);
+    } else {
+      initializeLanguage(); // Use default/global for login page
+    }
+  }, [user?.id, initializeLanguage]);
 
   if (isLoading) {
     return <LoadingScreen />;

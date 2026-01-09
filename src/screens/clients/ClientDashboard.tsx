@@ -119,8 +119,12 @@ const ClientDashboard: React.FC = () => {
   // Initialize global settings and language
   useEffect(() => {
     initializeSettings();
-    initializeLanguage();
-  }, [initializeSettings, initializeLanguage]);
+    if (user?.id) {
+      initializeLanguage(user.id);
+    } else {
+      initializeLanguage();
+    }
+  }, [initializeSettings, initializeLanguage, user?.id]);
   
   // Set initial name when client loads
   useEffect(() => {

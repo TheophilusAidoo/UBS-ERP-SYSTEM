@@ -44,12 +44,22 @@ function App() {
   useEffect(() => {
     try {
       checkAuth();
-      initializeLanguage();
       initializeSettings(); // Initialize settings including favicon
     } catch (error) {
       console.error('Error initializing app:', error);
     }
   }, []);
+
+  // Initialize language when user changes (after login/logout)
+  useEffect(() => {
+    if (user?.id) {
+      // User is logged in - load their language preference
+      initializeLanguage(user.id);
+    } else {
+      // User not logged in - use default/global language
+      initializeLanguage();
+    }
+  }, [user?.id]);
 
   // Update favicon when it changes
   useEffect(() => {

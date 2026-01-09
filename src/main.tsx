@@ -17,10 +17,14 @@ const ThemedApp = () => {
   const { initializeLanguage } = useLanguageStore();
   const theme = getTheme();
 
-  // Initialize language on app start (before everything else)
+  // Initialize language when user is available
   useEffect(() => {
-    initializeLanguage();
-  }, [initializeLanguage]);
+    if (user?.id) {
+      initializeLanguage(user.id);
+    } else {
+      initializeLanguage(); // Use default/global for login page
+    }
+  }, [user?.id, initializeLanguage]);
 
   // Initialize global settings on app start (from Supabase)
   useEffect(() => {

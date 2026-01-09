@@ -1,5 +1,6 @@
 // User Types
 export type UserRole = 'admin' | 'staff' | 'client';
+export type Language = 'en' | 'fr' | 'ar';
 
 export interface User {
   id: string;
