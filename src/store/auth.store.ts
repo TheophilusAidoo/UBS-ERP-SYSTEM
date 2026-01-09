@@ -59,7 +59,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   register: async (data: RegisterData) => {
     try {
       set({ isLoading: true });
-      const { user, session } = await authService.register(data);
+      const { user } = await authService.register(data);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
       set({ user, isAuthenticated: true, isLoading: false });
     } catch (error) {

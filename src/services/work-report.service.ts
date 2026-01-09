@@ -1,5 +1,5 @@
 import { supabase, TABLES } from './supabase';
-import { WorkReport, User, Project } from '../types';
+import { WorkReport } from '../types';
 import { mapUserFromDB } from '../utils/dbMapper';
 
 export interface CreateWorkReportData {

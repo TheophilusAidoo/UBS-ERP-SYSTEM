@@ -1,6 +1,6 @@
 import { supabase, TABLES } from './supabase';
 import { Proposal, ProposalItem } from '../types';
-import { mapUserFromDB } from '../utils/dbMapper';
+// import { mapUserFromDB } from '../utils/dbMapper';
 
 export interface CreateProposalData {
   companyId: string;

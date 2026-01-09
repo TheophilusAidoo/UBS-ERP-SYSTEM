@@ -109,7 +109,7 @@ const initialState = {
   isLoading: false,
 };
 
-export const useGlobalSettingsStore = create<GlobalSettings>((set, get) => ({
+export const useGlobalSettingsStore = create<GlobalSettings>((set) => ({
   ...initialState,
   
   initializeSettings: async () => {

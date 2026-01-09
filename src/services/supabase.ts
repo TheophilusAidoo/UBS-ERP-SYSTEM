@@ -28,6 +28,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export { supabase };
 
+// Type helper for Supabase queries to avoid 'never' type issues
+export type SupabaseQueryResult<T> = T extends Promise<infer U> ? U : T;
+
 // Database Tables
 export const TABLES = {
   users: 'users',

@@ -20,7 +20,7 @@ const getLanguageKey = (userId?: string): string => {
   return 'ubs_erp_language';
 };
 
-export const useLanguageStore = create<LanguageState>((set, get) => ({
+export const useLanguageStore = create<LanguageState>((set) => ({
   currentLanguage: DEFAULT_LANGUAGE,
   isRTL: false,
 

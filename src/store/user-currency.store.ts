@@ -19,6 +19,7 @@ const currencySymbols: Record<Currency, string> = {
   JPY: '¥',
   CNY: '¥',
   XAF: 'XAF',
+  GHS: '₵',
 };
 
 // Load user currency from localStorage
@@ -27,9 +28,10 @@ const loadUserCurrency = (userId: string): { currency: Currency; currencySymbol:
     const stored = localStorage.getItem(`ubs-user-currency-${userId}`);
     if (stored) {
       const data = JSON.parse(stored);
+      const currency = (data.currency || 'USD') as Currency;
       return {
-        currency: data.currency || 'USD',
-        currencySymbol: data.currencySymbol || currencySymbols[data.currency || 'USD'],
+        currency,
+        currencySymbol: data.currencySymbol || currencySymbols[currency] || '$',
       };
     }
   } catch (e) {
@@ -47,7 +49,7 @@ const saveUserCurrency = (userId: string, currency: Currency, currencySymbol: st
   }
 };
 
-export const useUserCurrencyStore = create<UserCurrencyState>((set, get) => ({
+export const useUserCurrencyStore = create<UserCurrencyState>((set) => ({
   currency: 'USD',
   currencySymbol: '$',
   

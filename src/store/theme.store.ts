@@ -38,7 +38,7 @@ const colorPalettes: Record<PrimaryColor, { main: string; light: string; dark: s
 };
 
 // Load from localStorage - per-user theme preferences (each user has their own theme)
-const loadTheme = (userId?: string, isAdmin?: boolean): { mode: ThemeMode; primaryColor: PrimaryColor; sidebarColor?: string } => {
+const loadTheme = (userId?: string, _isAdmin?: boolean): { mode: ThemeMode; primaryColor: PrimaryColor; sidebarColor?: string } => {
   try {
     if (userId) {
       // Load per-user theme preference
@@ -71,7 +71,7 @@ const loadTheme = (userId?: string, isAdmin?: boolean): { mode: ThemeMode; prima
 };
 
 // Save to localStorage - per-user theme preferences (each user has their own theme)
-const saveTheme = (mode: ThemeMode, primaryColor: PrimaryColor, sidebarColor: string | undefined, userId?: string, isAdmin?: boolean) => {
+const saveTheme = (mode: ThemeMode, primaryColor: PrimaryColor, sidebarColor: string | undefined, userId?: string, _isAdmin?: boolean) => {
   try {
     if (userId) {
       // Save per-user theme preference

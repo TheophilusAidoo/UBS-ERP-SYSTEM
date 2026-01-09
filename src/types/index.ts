@@ -391,3 +391,28 @@ export interface AuditLog {
   userAgent?: string;
   createdAt: string;
 }
+
+// Dashboard Stats
+export interface DashboardStats {
+  totalCompanies?: number;
+  totalStaff?: number;
+  activeProjects?: number;
+  pendingLeaves?: number;
+  totalRevenue?: number;
+  totalExpenses?: number;
+  profit?: number;
+  dailyIncome?: number;
+  dailyExpenses?: number;
+}
+
+// AI Chat Message
+export interface AIChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
+// Performance Types
+export type GoalType = 'short-term' | 'long-term';
+export type ReviewCycle = 'monthly' | 'quarterly' | 'annual';

@@ -1,6 +1,6 @@
 import { supabase, TABLES } from './supabase';
-import { User, UserRole } from '../types';
-import { mapUserFromDB, mapUserToDB } from '../utils/dbMapper';
+import { User } from '../types';
+import { mapUserFromDB } from '../utils/dbMapper';
 import { leaveService } from './leave.service';
 import { emailService } from './email.service';
 
@@ -149,20 +149,14 @@ class StaffService {
           const { defaultAnnualLeave, defaultSickLeave, defaultEmergencyLeave } = 
             JSON.parse(localStorage.getItem('ubs-global-settings') || '{}') || {};
           
-          await leaveService.updateLeaveBalance(authData.user.id, {
-            annual: {
-              total: defaultAnnualLeave || 20,
-              used: 0,
-            },
-            sick: {
-              total: defaultSickLeave || 10,
-              used: 0,
-            },
-            emergency: {
-              total: defaultEmergencyLeave || 5,
-              used: 0,
-            },
-          });
+          if (authData.user) {
+            await leaveService.updateLeaveBalance({
+              userId: authData.user.id,
+              annualTotal: defaultAnnualLeave || 20,
+              sickTotal: defaultSickLeave || 10,
+              emergencyTotal: defaultEmergencyLeave || 5,
+            });
+          }
         } catch (leaveError) {
           // Log but don't fail the user creation if leave balance fails
           console.warn('Failed to initialize leave balance:', leaveError);
@@ -170,14 +164,14 @@ class StaffService {
 
         // Fetch company name for email (if needed)
         let companyName = 'UBS ERP';
-        if (userProfile.company_id) {
+        if ((userProfile as any).company_id) {
           try {
             const { data: company } = await supabase
               .from(TABLES.companies)
               .select('name')
-              .eq('id', userProfile.company_id)
+              .eq('id', (userProfile as any).company_id)
               .single();
-            if (company) companyName = company.name;
+            if (company) companyName = (company as any).name;
           } catch (companyError) {
             console.warn('Failed to fetch company name for email:', companyError);
           }
@@ -267,7 +261,7 @@ class StaffService {
           .eq('id', authUser.id)
           .single();
         
-        if (!currentUser || currentUser.role !== 'admin') {
+        if (!currentUser || (currentUser as any).role !== 'admin') {
           throw new Error('Only administrators can assign or change company assignments for staff members.');
         }
       } else {
@@ -292,8 +286,8 @@ class StaffService {
     if (data.salaryDate !== undefined) updateData.salary_date = data.salaryDate;
     updateData.updated_at = new Date().toISOString();
 
-    const { data: userProfile, error } = await supabase
-      .from(TABLES.users)
+    const { data: userProfile, error } = await (supabase
+      .from(TABLES.users) as any)
       .update(updateData)
       .eq('id', data.id)
       .select(`
@@ -362,7 +356,9 @@ class StaffService {
   async banStaff(id: string): Promise<User> {
     const { data, error } = await supabase
       .from(TABLES.users)
-      .update({ 
+      (supabase
+      .from(TABLES.users) as any)
+      .update({
         is_banned: true,
         updated_at: new Date().toISOString()
       })
@@ -393,6 +389,8 @@ class StaffService {
   async unbanStaff(id: string): Promise<User> {
     const { data, error } = await supabase
       .from(TABLES.users)
+      (supabase
+      .from(TABLES.users) as any)
       .update({ 
         is_banned: false,
         updated_at: new Date().toISOString()

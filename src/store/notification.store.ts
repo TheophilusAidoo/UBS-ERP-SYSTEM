@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { messageService } from '../services/message.service';
-import { useAuthStore } from './auth.store';
+// import { useAuthStore } from './auth.store';
 
 interface NotificationState {
   unreadCount: number;
