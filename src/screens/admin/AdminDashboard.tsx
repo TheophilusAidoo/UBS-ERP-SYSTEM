@@ -929,13 +929,13 @@ const AdminDashboard: React.FC = () => {
                 <TableRow sx={{ backgroundColor: '#f9fafb' }}>
                   <TableCell sx={{ fontWeight: 600, py: 2 }}>Company</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 600, py: 2 }}>
-                    {financialPeriod === 'day' ? 'Daily Income' : 'Avg Daily Income'}
+                    Daily Income
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 600, py: 2 }}>
-                    {financialPeriod === 'day' ? 'Daily Expenses' : 'Avg Daily Expenses'}
+                    Daily Expenses
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 600, py: 2 }}>
-                    {financialPeriod === 'day' ? 'Daily Profit' : 'Avg Daily Profit'}
+                    Daily Profit
                   </TableCell>
                 </TableRow>
               </TableHead>
