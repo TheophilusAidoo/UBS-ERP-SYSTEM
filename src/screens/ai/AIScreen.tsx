@@ -38,6 +38,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../store/auth.store';
 import { aiService, CreateInsightData } from '../../services/ai.service';
+import type { SystemContext } from '../../services/ai.service';
 import { AIInsight, AIChatMessage } from '../../types';
 
 const AIScreen: React.FC = () => {
@@ -113,10 +114,16 @@ const AIScreen: React.FC = () => {
     setLoading(true);
 
     try {
+      // Only admin and staff can use AI - clients are not allowed
+      if (user?.role === 'client') {
+        setError('AI Assistant is only available for admin and staff users.');
+        return;
+      }
+      
       // Pass user context to AI service
-      const context = {
-        userId: user?.id,
-        userRole: user?.role,
+      const context: SystemContext = {
+        userId: user?.id || '',
+        userRole: (user?.role === 'admin' || user?.role === 'staff') ? user.role : 'staff',
         companyId: user?.companyId || undefined,
       };
       const response = await aiService.chat(inputMessage, messages, context);

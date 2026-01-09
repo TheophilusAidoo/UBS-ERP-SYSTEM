@@ -77,15 +77,16 @@ class ClientService {
       }
       // Let Supabase handle password strength validation - we don't enforce additional rules
 
+      // Normalize email at the start (used throughout this function)
+      const normalizedEmail = data.email.trim().toLowerCase();
+      
       // Try to use admin client first (auto-confirms user)
       const adminClient = getAdminClient();
       
       if (adminClient) {
         // Use admin API to create user with auto-confirmation
         try {
-          console.log('🔐 Creating auth user with admin client for:', data.email);
-          // Normalize email for consistency
-          const normalizedEmail = data.email.trim().toLowerCase();
+          console.log('🔐 Creating auth user with admin client for:', normalizedEmail);
           
           const { data: adminUserData, error: adminError } = await adminClient.auth.admin.createUser({
             email: normalizedEmail,

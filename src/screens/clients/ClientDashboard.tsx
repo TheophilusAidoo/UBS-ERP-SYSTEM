@@ -400,8 +400,8 @@ const ClientDashboard: React.FC = () => {
         }
       }
       
-      invoiceCurrency = (invoiceCurrency || currency).toUpperCase() as Currency;
-      const invoiceCurrencySymbol = getCurrencySymbol(invoiceCurrency) || invoiceCurrency;
+      invoiceCurrency = (invoiceCurrency || currency || 'USD').toUpperCase();
+      const invoiceCurrencySymbol = getCurrencySymbol(invoiceCurrency as Currency) || invoiceCurrency;
       
       const pdfData = {
         invoiceNumber: invoice.invoiceNumber,
@@ -480,10 +480,10 @@ const ClientDashboard: React.FC = () => {
     }
     
     // Ensure currency is uppercase for proper matching
-    targetCurrency = (targetCurrency || currency).toUpperCase() as Currency;
+    targetCurrency = (targetCurrency || currency || 'USD').toUpperCase();
     
     // Get symbol - fallback to currency code if symbol not found
-    const symbol = getCurrencySymbol(targetCurrency) || targetCurrency;
+    const symbol = getCurrencySymbol(targetCurrency as Currency) || targetCurrency;
     
     return `${symbol}${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };

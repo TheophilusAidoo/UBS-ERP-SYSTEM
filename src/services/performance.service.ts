@@ -94,6 +94,7 @@ class PerformanceService {
       description: kpi.description,
       unit: kpi.unit,
       target: kpi.target,
+      createdAt: kpi.created_at || new Date().toISOString(),
     };
   }
 
@@ -140,6 +141,7 @@ class PerformanceService {
       description: kpi.description,
       unit: kpi.unit,
       target: kpi.target,
+      createdAt: kpi.created_at || new Date().toISOString(),
     };
   }
 

@@ -64,6 +64,7 @@ const ProductsScreen: React.FC = () => {
   const { t } = useTranslation();
   const { user } = useAuthStore();
   const { currencySymbol } = useCurrency();
+  const { currency, getCurrencySymbol } = useGlobalSettingsStore();
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<ProductSale[]>([]);
   const [loading, setLoading] = useState(false);

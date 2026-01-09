@@ -242,6 +242,7 @@ export interface WorkReport {
   date: string;
   createdAt: string;
   user?: User; // User relation
+  project?: Project; // Project relation (from DB joins)
 }
 
 export interface DailyReport {
@@ -276,7 +277,7 @@ export interface Message {
     type: 'file' | 'image';
     url: string;
     name: string;
-    size: number;
+    size?: number; // Optional to allow creating messages without size
   }>;
   isRead: boolean;
   createdAt: string;

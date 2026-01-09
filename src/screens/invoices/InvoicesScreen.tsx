@@ -195,6 +195,9 @@ const InvoicesScreen: React.FC = () => {
           unitPrice: item.unitPrice,
           total: item.total,
         })),
+        signature: invoice.signature || '',
+        createClientAccount: false,
+        clientPassword: '',
       });
     } else {
       setEditingInvoice(null);
@@ -1546,7 +1549,7 @@ const InvoicesScreen: React.FC = () => {
                                   <Email fontSize="small" />
                                 </IconButton>
                               )}
-                              {(invoice.status === 'sent' || invoice.status === 'pending') && invoice.status !== 'paid' && (
+                              {(invoice.status === 'sent' || invoice.status === 'pending') && (
                                 <>
                                   {invoice.status === 'sent' && (
                                     <IconButton
@@ -1706,7 +1709,7 @@ const InvoicesScreen: React.FC = () => {
                     value={formData.companyId}
                     label={t('invoices.filterByCompany')}
                     onChange={(e) => setFormData({ ...formData, companyId: e.target.value })}
-                    disabled={!!editingInvoice || (!isAdmin && user?.companyId)}
+                    disabled={!!editingInvoice || (!isAdmin && !!user?.companyId)}
                   >
                     {companies.map((company) => (
                       <MenuItem key={company.id} value={company.id}>
@@ -1976,7 +1979,10 @@ const InvoicesScreen: React.FC = () => {
                   clientName: formData.clientName,
                   clientEmail: formData.clientEmail,
                   invoiceNumber: formData.invoiceNumber,
-                  items: formData.items,
+                  items: formData.items.map((item, idx) => ({
+                    ...item,
+                    id: `temp-${idx}`,
+                  })),
                   subtotal: calculateTotals().subtotal,
                   tax: parseFloat(formData.tax) || 0,
                   total: calculateTotals().total,

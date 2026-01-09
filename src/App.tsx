@@ -114,7 +114,9 @@ function App() {
             <Route path="/register" element={<RegisterScreen />} />
             <Route path="/reset-password" element={<ResetPasswordScreen />} />
             {/* Allow direct access to dashboard for testing */}
-            <Route path="/dashboard" element={<AdminLayout><AdminDashboard /></AdminLayout>} />
+            <Route path="/dashboard" element={<AdminLayout />}>
+              <Route index element={<AdminDashboard />} />
+            </Route>
             <Route path="*" element={<Navigate to="/login" replace />} />
           </>
         ) : user?.role === 'client' ? (
@@ -147,7 +149,7 @@ function App() {
             <Route path="audit-logs" element={<AuditLogsScreen />} />
             <Route path="settings" element={<SettingsScreen />} />
           </Route>
-          <Route path="/client/:clientId" element={<AdminLayout><ClientDashboard /></AdminLayout>} />
+          <Route path="/client/:clientId" element={<ClientDashboard />} />
           <Route path="/client/:clientId/messages" element={<ClientMessagesScreen />} />
           <Route path="/login" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
@@ -172,7 +174,7 @@ function App() {
             <Route path="ai" element={<AIScreen />} />
             <Route path="settings" element={<SettingsScreen />} />
           </Route>
-          <Route path="/client/:clientId" element={<StaffLayout><ClientDashboard /></StaffLayout>} />
+          <Route path="/client/:clientId" element={<ClientDashboard />} />
           <Route path="/client/:clientId/messages" element={<ClientMessagesScreen />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </>

@@ -461,7 +461,10 @@ const MessagesScreen: React.FC = () => {
       client: messageType === 'client' ? (selectedClient || allClients.find(c => c.id === selectedClientForNew)) : undefined,
       subject: messageSubject || undefined,
       content: messageContent,
-      attachments: messageAttachments.length > 0 ? messageAttachments : undefined,
+      attachments: messageAttachments.length > 0 ? messageAttachments.map(att => ({
+        ...att,
+        size: att.size || 0,
+      })) : undefined,
       isRead: false,
       createdAt: new Date().toISOString(),
     };

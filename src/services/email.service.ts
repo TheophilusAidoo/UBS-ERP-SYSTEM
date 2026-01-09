@@ -376,6 +376,8 @@ class EmailService {
     total: number;
     validUntil?: string;
     items: Array<{ description: string; quantity: number; unitPrice: number; total: number }>;
+    companyLogo?: string;
+    companyName?: string;
   }, currencySymbol: string = '$'): string {
     const formatCurrency = (amount: number) => {
       return `${currencySymbol}${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -497,6 +499,8 @@ class EmailService {
     items: Array<{ description: string; quantity: number; unitPrice: number; total: number }>;
     companyLogo?: string;
     companyName?: string;
+    signature?: string;
+    signedBy?: string;
   }, currencySymbol: string = '$'): string {
     const formatCurrency = (amount: number) => {
       return `${currencySymbol}${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

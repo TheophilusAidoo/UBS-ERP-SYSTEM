@@ -339,7 +339,7 @@ class ProposalService {
       // Extract sequence numbers and find the maximum
       const sequences = Array.from(uniqueNumbers)
         .map(num => {
-          const match = num.match(new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)(?:-.*)?$`));
+          const match = (typeof num === 'string' ? num : String(num)).match(new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)(?:-.*)?$`));
           return match ? parseInt(match[1], 10) : 0;
         })
         .filter(seq => seq > 0);

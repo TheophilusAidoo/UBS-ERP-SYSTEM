@@ -1,5 +1,5 @@
 import { supabase, TABLES } from './supabase';
-import { AIInsight, AIChatMessage } from '../types';
+import { AIInsight, AIChatMessage, InvoiceStatus } from '../types';
 import { leaveService } from './leave.service';
 import { invoiceService } from './invoice.service';
 import { proposalService } from './proposal.service';
@@ -17,7 +17,7 @@ export interface CreateInsightData {
   data?: Record<string, any>;
 }
 
-interface SystemContext {
+export interface SystemContext {
   userId?: string;
   userRole?: 'admin' | 'staff';
   companyId?: string;
@@ -456,7 +456,14 @@ class AIService {
             companyId: context?.companyId,
           });
           
-          const overdueInvoices = invoices.filter(i => i.status === 'overdue');
+          // Check for overdue invoices by comparing dueDate with current date
+          const now = new Date();
+          const overdueInvoices = invoices.filter(i => {
+            if (!i.dueDate) return false;
+            const status = i.status as InvoiceStatus;
+            if (status === 'paid') return false;
+            return new Date(i.dueDate) < now;
+          });
           const overduePercentage = invoices.length > 0 ? (overdueInvoices.length / invoices.length) * 100 : 0;
           
           if (overduePercentage > 20) {
@@ -718,7 +725,14 @@ Please provide these details, or you can create it manually in the Leaves sectio
             const total = invoices.length;
             const paid = invoices.filter(i => i.status === 'paid').length;
             const pending = invoices.filter(i => i.status === 'pending').length;
-            const overdue = invoices.filter(i => i.status === 'overdue').length;
+            // Check for overdue invoices by comparing dueDate with current date
+            const now = new Date();
+            const overdue = invoices.filter(i => {
+              if (!i.dueDate) return false;
+              const status = i.status as InvoiceStatus;
+              if (status === 'paid') return false;
+              return new Date(i.dueDate) < now;
+            }).length;
             
             return `Your Invoice Summary:
 • Total Invoices: ${total}

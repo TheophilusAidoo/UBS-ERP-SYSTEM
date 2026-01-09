@@ -230,7 +230,7 @@ class LeaveService {
     let filteredData = data || [];
     if (filters?.companyId) {
       filteredData = filteredData.filter(item => {
-        const user = usersMap.get(item.user_id);
+        const user = usersMap.get(item.user_id) as any;
         return user?.companyId === filters.companyId;
       });
     }

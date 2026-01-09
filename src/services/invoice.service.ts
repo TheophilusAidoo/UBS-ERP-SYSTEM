@@ -262,6 +262,8 @@ class InvoiceService {
     companyId?: string;
     createdBy?: string;
     status?: InvoiceStatus;
+    clientId?: string;
+    clientEmail?: string;
   }): Promise<Invoice[]> {
     let query = supabase.from(TABLES.invoices).select().order('created_at', { ascending: false }).limit(500);
 
