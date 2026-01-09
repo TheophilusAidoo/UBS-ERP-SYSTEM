@@ -106,12 +106,12 @@ const AdminDeliveriesScreen: React.FC = () => {
     setLoading(true);
     try {
       await deliveryService.deleteDelivery(deleteDialog.delivery.id);
-      setSuccess('Delivery deleted successfully');
+      setSuccess(t('adminDelivery.deliveryDeleted'));
       setTimeout(() => setSuccess(null), 3000);
       setDeleteDialog({ open: false, delivery: null });
       fetchDeliveries();
     } catch (err: any) {
-      setError(err.message || 'Failed to delete delivery');
+      setError(err.message || t('adminDelivery.failedToDelete'));
     } finally {
       setLoading(false);
     }
@@ -129,11 +129,11 @@ const AdminDeliveriesScreen: React.FC = () => {
     setLoading(true);
     try {
       await deliveryService.updateDelivery(delivery.id, { status });
-      setSuccess('Delivery status updated');
+      setSuccess(t('adminDelivery.deliveryStatusUpdated'));
       setTimeout(() => setSuccess(null), 3000);
       fetchDeliveries();
     } catch (err: any) {
-      setError(err.message || 'Failed to update status');
+      setError(err.message || t('adminDelivery.failedToUpdateStatus'));
     } finally {
       setLoading(false);
     }
@@ -171,7 +171,7 @@ const AdminDeliveriesScreen: React.FC = () => {
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" sx={{ fontWeight: 700 }}>
-          Delivery Management
+          {t('adminDelivery.title')}
         </Typography>
         <Button
           variant="outlined"
@@ -179,7 +179,7 @@ const AdminDeliveriesScreen: React.FC = () => {
           onClick={fetchDeliveries}
           sx={{ textTransform: 'none' }}
         >
-          Refresh
+          {t('adminDelivery.refresh')}
         </Button>
       </Box>
 
@@ -200,13 +200,13 @@ const AdminDeliveriesScreen: React.FC = () => {
           <Tab
             icon={<Flight />}
             iconPosition="start"
-            label="Air Deliveries ✈️"
+            label={t('adminDelivery.airDeliveries')}
             sx={{ textTransform: 'none', fontWeight: 600 }}
           />
           <Tab
             icon={<LocalShipping />}
             iconPosition="start"
-            label="Sea Deliveries"
+            label={t('adminDelivery.seaDeliveries')}
             sx={{ textTransform: 'none', fontWeight: 600 }}
           />
         </Tabs>
@@ -220,7 +220,7 @@ const AdminDeliveriesScreen: React.FC = () => {
               <TextField
                 fullWidth
                 size="small"
-                placeholder="Search by sender name, destination, or ID..."
+                placeholder={t('adminDelivery.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 InputProps={{
@@ -230,13 +230,13 @@ const AdminDeliveriesScreen: React.FC = () => {
             </Grid>
             <Grid item xs={12} md={4}>
               <FormControl fullWidth size="small">
-                <InputLabel>Company</InputLabel>
+                <InputLabel>{t('adminDelivery.company')}</InputLabel>
                 <Select
                   value={companyFilter}
-                  label="Company"
+                  label={t('adminDelivery.company')}
                   onChange={(e) => setCompanyFilter(e.target.value)}
                 >
-                  <MenuItem value="">All Companies</MenuItem>
+                  <MenuItem value="">{t('adminDelivery.allCompanies')}</MenuItem>
                   {companies.map((company) => (
                     <MenuItem key={company.id} value={company.id}>
                       {company.name}
@@ -247,17 +247,17 @@ const AdminDeliveriesScreen: React.FC = () => {
             </Grid>
             <Grid item xs={12} md={4}>
               <FormControl fullWidth size="small">
-                <InputLabel>Status</InputLabel>
+                <InputLabel>{t('adminDelivery.status')}</InputLabel>
                 <Select
                   value={statusFilter}
-                  label="Status"
+                  label={t('adminDelivery.status')}
                   onChange={(e) => setStatusFilter(e.target.value as DeliveryStatus | '')}
                 >
-                  <MenuItem value="">All Statuses</MenuItem>
-                  <MenuItem value="pending">Pending</MenuItem>
-                  <MenuItem value="in_transit">In Transit</MenuItem>
-                  <MenuItem value="delivered">Delivered</MenuItem>
-                  <MenuItem value="cancelled">Cancelled</MenuItem>
+                  <MenuItem value="">{t('adminDelivery.allStatuses')}</MenuItem>
+                  <MenuItem value="pending">{t('adminDelivery.pending')}</MenuItem>
+                  <MenuItem value="in_transit">{t('adminDelivery.inTransit')}</MenuItem>
+                  <MenuItem value="delivered">{t('adminDelivery.delivered')}</MenuItem>
+                  <MenuItem value="cancelled">{t('adminDelivery.cancelled')}</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -275,7 +275,7 @@ const AdminDeliveriesScreen: React.FC = () => {
           ) : filteredDeliveries.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <Typography variant="h6" color="text.secondary">
-                No deliveries found
+                {t('adminDelivery.noDeliveriesFound')}
               </Typography>
             </Box>
           ) : (
@@ -283,16 +283,16 @@ const AdminDeliveriesScreen: React.FC = () => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Sender Name</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Sender Number</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Departure</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Destination</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Items</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Company</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{t('adminDelivery.date')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{t('adminDelivery.senderName')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{t('adminDelivery.senderNumber')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{t('adminDelivery.departure')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{t('adminDelivery.destination')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{t('adminDelivery.items')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{t('adminDelivery.status')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{t('adminDelivery.company')}</TableCell>
                     <TableCell sx={{ fontWeight: 600 }} align="center">
-                      Actions
+                      {t('adminDelivery.actions')}
                     </TableCell>
                   </TableRow>
                 </TableHead>
@@ -304,7 +304,7 @@ const AdminDeliveriesScreen: React.FC = () => {
                       <TableCell>{delivery.senderPhone || '-'}</TableCell>
                       <TableCell>{delivery.departure}</TableCell>
                       <TableCell>{delivery.destination}</TableCell>
-                      <TableCell>{delivery.items.length} item(s)</TableCell>
+                      <TableCell>{delivery.items.length} {delivery.items.length === 1 ? t('adminDelivery.item') : t('adminDelivery.itemsPlural')}</TableCell>
                       <TableCell>
                         <Chip
                           label={delivery.status.replace('_', ' ')}
@@ -342,7 +342,7 @@ const AdminDeliveriesScreen: React.FC = () => {
       {/* View Dialog */}
       <Dialog open={viewDialog.open} onClose={() => setViewDialog({ open: false, delivery: null })} maxWidth="md" fullWidth>
         <DialogTitle sx={{ fontWeight: 600 }}>
-          Delivery Details - {viewDialog.delivery?.clientName}
+          {t('adminDelivery.deliveryDetails')} - {viewDialog.delivery?.clientName}
         </DialogTitle>
         <DialogContent>
           {viewDialog.delivery && (

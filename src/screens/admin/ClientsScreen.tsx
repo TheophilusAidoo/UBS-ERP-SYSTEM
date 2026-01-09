@@ -206,7 +206,7 @@ const AdminClientsScreen: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.email || !formData.companyId) {
-      setError('Name, email, and company are required');
+      setError(t('adminClients.nameRequired'));
       return;
     }
 
@@ -226,7 +226,7 @@ const AdminClientsScreen: React.FC = () => {
           notes: formData.notes || undefined,
         };
         await clientService.updateClient(updateData);
-        setSuccess('Client updated successfully!');
+        setSuccess(t('adminClients.clientUpdated'));
       } else {
         const createData: CreateClientData = {
           companyId: formData.companyId,
@@ -240,12 +240,12 @@ const AdminClientsScreen: React.FC = () => {
           notes: formData.notes || undefined,
         };
         await clientService.createClient(createData);
-        setSuccess('Client created successfully!');
+        setSuccess(t('adminClients.clientCreated'));
       }
       handleCloseDialog();
       fetchClients();
     } catch (err: any) {
-      setError(err.message || 'Failed to save client');
+      setError(err.message || t('adminClients.failedToSave'));
     } finally {
       setLoading(false);
     }
@@ -257,11 +257,11 @@ const AdminClientsScreen: React.FC = () => {
     setLoading(true);
     try {
       await clientService.deleteClient(deleteDialog.client.id);
-      setSuccess('Client deleted successfully!');
+      setSuccess(t('adminClients.clientDeleted'));
       setDeleteDialog({ open: false, client: null });
       fetchClients();
     } catch (err: any) {
-      setError(err.message || 'Failed to delete client');
+      setError(err.message || t('adminClients.failedToDelete'));
     } finally {
       setLoading(false);
     }
@@ -271,7 +271,7 @@ const AdminClientsScreen: React.FC = () => {
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
-          All Clients
+          {t('adminClients.title')}
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
@@ -288,7 +288,7 @@ const AdminClientsScreen: React.FC = () => {
             onClick={() => handleOpenDialog()}
             disabled={loading}
           >
-            Add Client
+            {t('adminClients.addClient')}
           </Button>
         </Box>
       </Box>
@@ -310,7 +310,7 @@ const AdminClientsScreen: React.FC = () => {
           <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
             <TextField
               fullWidth
-              placeholder="Search clients by name, email, or company..."
+              placeholder={t('adminClients.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               InputProps={{
@@ -322,13 +322,13 @@ const AdminClientsScreen: React.FC = () => {
               }}
             />
             <FormControl sx={{ minWidth: 200 }}>
-              <InputLabel>Filter by Company</InputLabel>
+              <InputLabel>{t('adminClients.filterByCompany')}</InputLabel>
               <Select
                 value={companyFilter}
-                label="Filter by Company"
+                label={t('adminClients.filterByCompany')}
                 onChange={(e) => setCompanyFilter(e.target.value)}
               >
-                <MenuItem value="">All Companies</MenuItem>
+                <MenuItem value="">{t('adminClients.allCompanies')}</MenuItem>
                 {companies.filter(c => c.isActive).map((company) => (
                   <MenuItem key={company.id} value={company.id}>
                     {company.name}
@@ -346,7 +346,7 @@ const AdminClientsScreen: React.FC = () => {
             <Box sx={{ textAlign: 'center', p: 4 }}>
               <People sx={{ fontSize: 64, color: 'text.secondary', opacity: 0.3, mb: 2 }} />
               <Typography variant="h6" color="text.secondary" sx={{ mb: 1, fontWeight: 500 }}>
-                {searchQuery || companyFilter ? t('common.noResults') : 'No clients found'}
+                {searchQuery || companyFilter ? t('common.noResults') : t('adminClients.noClientsFound')}
               </Typography>
             </Box>
           ) : (
@@ -354,15 +354,15 @@ const AdminClientsScreen: React.FC = () => {
               <Table>
                 <TableHead>
                   <TableRow sx={{ backgroundColor: 'action.hover' }}>
-                    <TableCell sx={{ fontWeight: 600, py: 2 }}>Client Name</TableCell>
-                    <TableCell sx={{ fontWeight: 600, py: 2 }}>Email</TableCell>
-                    <TableCell sx={{ fontWeight: 600, py: 2 }}>Phone</TableCell>
-                    <TableCell sx={{ fontWeight: 600, py: 2 }}>Company</TableCell>
-                    <TableCell sx={{ fontWeight: 600, py: 2 }}>Contact Person</TableCell>
-                    <TableCell sx={{ fontWeight: 600, py: 2 }}>Assigned To</TableCell>
-                    <TableCell sx={{ fontWeight: 600, py: 2 }}>Created By</TableCell>
-                    <TableCell sx={{ fontWeight: 600, py: 2 }} align="center">Status</TableCell>
-                    <TableCell sx={{ fontWeight: 600, py: 2 }} align="center">Actions</TableCell>
+                    <TableCell sx={{ fontWeight: 600, py: 2 }}>{t('adminClients.clientName')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600, py: 2 }}>{t('adminClients.email')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600, py: 2 }}>{t('adminClients.phone')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600, py: 2 }}>{t('adminClients.company')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600, py: 2 }}>{t('adminClients.contactPerson')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600, py: 2 }}>{t('adminClients.assignedTo')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600, py: 2 }}>{t('adminClients.createdBy')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600, py: 2 }} align="center">{t('adminClients.status')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600, py: 2 }} align="center">{t('adminClients.actions')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -454,7 +454,7 @@ const AdminClientsScreen: React.FC = () => {
                       </TableCell>
                       <TableCell align="center">
                         <Chip
-                          label={client.isActive ? 'Active' : 'Inactive'}
+                          label={client.isActive ? t('adminClients.active') : t('adminClients.inactive')}
                           size="small"
                           color={client.isActive ? 'success' : 'default'}
                           variant="outlined"
@@ -474,7 +474,7 @@ const AdminClientsScreen: React.FC = () => {
                             size="small"
                             color="primary"
                             onClick={() => handleOpenDialog(client)}
-                            title="Edit Client"
+                            title={t('adminClients.editClient')}
                           >
                             <Edit fontSize="small" />
                           </IconButton>
@@ -482,7 +482,7 @@ const AdminClientsScreen: React.FC = () => {
                             size="small"
                             color="error"
                             onClick={() => setDeleteDialog({ open: true, client })}
-                            title="Delete Client"
+                            title={t('adminClients.deleteClient')}
                           >
                             <Delete fontSize="small" />
                           </IconButton>
@@ -506,14 +506,14 @@ const AdminClientsScreen: React.FC = () => {
         PaperProps={{ sx: { borderRadius: 2 } }}
       >
         <DialogTitle sx={{ fontWeight: 600, pb: 1 }}>
-          {editingClient ? 'Edit Client' : 'Add New Client'}
+          {editingClient ? t('adminClients.updateClient') : t('adminClients.createClient')}
         </DialogTitle>
         <Divider />
         <DialogContent sx={{ pt: 3 }}>
           <Grid container spacing={2.5}>
             <Grid item xs={12}>
               <TextField
-                label="Company *"
+                label={`${t('adminClients.company')} *`}
                 fullWidth
                 required
                 select
@@ -526,7 +526,7 @@ const AdminClientsScreen: React.FC = () => {
                 }}
                 disabled={!!editingClient}
               >
-                <option value="">Select Company</option>
+                <option value="">{t('common.select') || 'Select'} {t('adminClients.company')}</option>
                 {companies.filter(c => c.isActive).map((company) => (
                   <option key={company.id} value={company.id}>
                     {company.name}
@@ -555,23 +555,23 @@ const AdminClientsScreen: React.FC = () => {
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                label="Client Name *"
+                label={`${t('adminClients.clientName')} *`}
                 fullWidth
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Client Company Name"
+                placeholder={t('adminClients.name')}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                label="Email *"
+                label={`${t('adminClients.email')} *`}
                 type="email"
                 fullWidth
                 required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="client@example.com"
+                placeholder={t('adminClients.email')}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -583,13 +583,12 @@ const AdminClientsScreen: React.FC = () => {
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                label="Password (Optional - for client login)"
+                label={`${t('adminClients.password')} (${t('common.optional') || 'Optional'})`}
                 type="password"
                 fullWidth
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                placeholder="Leave empty if client won't login"
-                helperText={editingClient ? "Leave empty to keep existing password" : "Minimum 6 characters. Client can use this to log in."}
+                placeholder={t('adminClients.password')}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -601,11 +600,11 @@ const AdminClientsScreen: React.FC = () => {
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                label="Phone"
+                label={t('adminClients.phone')}
                 fullWidth
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="+1234567890"
+                placeholder={t('adminClients.phone')}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -617,11 +616,11 @@ const AdminClientsScreen: React.FC = () => {
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                label="Contact Person"
+                label={t('adminClients.contactPerson')}
                 fullWidth
                 value={formData.contactPerson}
                 onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
-                placeholder="John Doe"
+                placeholder={t('adminClients.contactPerson')}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -633,31 +632,31 @@ const AdminClientsScreen: React.FC = () => {
             </Grid>
             <Grid item xs={12}>
               <TextField
-                label="Address"
+                label={t('adminClients.address')}
                 fullWidth
                 multiline
                 rows={2}
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                placeholder="Street address, City, Country"
+                placeholder={t('adminClients.address')}
               />
             </Grid>
             <Grid item xs={12}>
               <TextField
-                label="Notes"
+                label={t('adminClients.notes')}
                 fullWidth
                 multiline
                 rows={3}
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Additional notes about the client..."
+                placeholder={t('adminClients.notes')}
               />
             </Grid>
           </Grid>
         </DialogContent>
         <DialogActions sx={{ p: 2.5, pt: 2 }}>
           <Button onClick={handleCloseDialog} sx={{ textTransform: 'none', fontWeight: 600 }}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={handleSubmit}
@@ -665,7 +664,7 @@ const AdminClientsScreen: React.FC = () => {
             disabled={loading || !formData.name || !formData.email || !formData.companyId}
             sx={{ textTransform: 'none', fontWeight: 600 }}
           >
-            {loading ? <CircularProgress size={20} /> : editingClient ? 'Update' : 'Create'}
+            {loading ? <CircularProgress size={20} /> : editingClient ? t('common.update') : t('common.create')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -676,14 +675,14 @@ const AdminClientsScreen: React.FC = () => {
         onClose={() => setDeleteDialog({ open: false, client: null })}
         PaperProps={{ sx: { borderRadius: 2 } }}
       >
-        <DialogTitle sx={{ fontWeight: 600 }}>Delete Client</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 600 }}>{t('adminClients.deleteClient')}</DialogTitle>
         <Divider />
         <DialogContent sx={{ pt: 3 }}>
           <Typography variant="body1" sx={{ mb: 2 }}>
-            Are you sure you want to delete <strong>{deleteDialog.client?.name}</strong>?
+            {t('adminClients.areYouSureDelete')} <strong>{deleteDialog.client?.name}</strong>?
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            This action cannot be undone. All associated projects and messages will be preserved.
+            {t('adminClients.thisActionCannotBeUndone')}
           </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2.5, pt: 2 }}>
@@ -691,7 +690,7 @@ const AdminClientsScreen: React.FC = () => {
             onClick={() => setDeleteDialog({ open: false, client: null })}
             sx={{ textTransform: 'none', fontWeight: 600 }}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={handleDelete}
@@ -700,7 +699,7 @@ const AdminClientsScreen: React.FC = () => {
             disabled={loading}
             sx={{ textTransform: 'none', fontWeight: 600 }}
           >
-            {loading ? <CircularProgress size={20} /> : 'Delete'}
+            {loading ? <CircularProgress size={20} /> : t('common.delete')}
           </Button>
         </DialogActions>
       </Dialog>

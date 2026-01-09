@@ -116,7 +116,7 @@ const AdminProductsScreen: React.FC = () => {
       });
       setStats(data);
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch statistics');
+      setError(err.message || t('adminProducts.failedToFetchStatistics'));
     } finally {
       setLoading(false);
     }
@@ -133,7 +133,7 @@ const AdminProductsScreen: React.FC = () => {
       setSales(data);
     } catch (err: any) {
       console.error('Failed to fetch orders:', err);
-      setError(err.message || 'Failed to fetch orders');
+      setError(err.message || t('adminProducts.failedToFetchOrders'));
     } finally {
       setLoading(false);
     }
@@ -150,7 +150,7 @@ const AdminProductsScreen: React.FC = () => {
       await fetchSales();
       await fetchStats(); // Refresh stats after status update
     } catch (err: any) {
-      setError(err.message || 'Failed to update order status');
+      setError(err.message || t('adminProducts.failedToUpdateOrderStatus'));
     } finally {
       setLoading(false);
     }
@@ -202,22 +202,22 @@ const AdminProductsScreen: React.FC = () => {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
         <Box sx={{ flex: 1 }}>
           <Typography variant="h4" sx={{ fontWeight: 700, mb: 0.5 }}>
-            Orders & Products in Demand
+            {t('adminProducts.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Track what customers want and order fulfillment across all companies
+            {t('adminProducts.subtitle')}
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
           <FormControl size="small" sx={{ minWidth: 200 }}>
-            <InputLabel>Filter by Company</InputLabel>
+            <InputLabel>{t('adminProducts.filterByCompany')}</InputLabel>
             <Select
               value={companyFilter}
-              label="Filter by Company"
+              label={t('adminProducts.filterByCompany')}
               onChange={(e) => setCompanyFilter(e.target.value)}
               sx={{ borderRadius: 2 }}
             >
-              <MenuItem value="">All Companies</MenuItem>
+              <MenuItem value="">{t('adminProducts.allCompanies')}</MenuItem>
               {companies.map((company) => (
                 <MenuItem key={company.id} value={company.id}>
                   {company.name}
@@ -225,7 +225,7 @@ const AdminProductsScreen: React.FC = () => {
               ))}
             </Select>
           </FormControl>
-          <IconButton onClick={fetchStats} title="Refresh Data">
+          <IconButton onClick={fetchStats} title={t('adminProducts.refreshData')}>
             <Refresh />
           </IconButton>
         </Box>
@@ -246,7 +246,7 @@ const AdminProductsScreen: React.FC = () => {
                 <Inventory color="primary" />
                 <Box>
                   <Typography variant="body2" color="text.secondary">
-                    Total Products
+                    {t('adminProducts.totalProducts')}
                   </Typography>
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>
                     {products.length}
@@ -263,7 +263,7 @@ const AdminProductsScreen: React.FC = () => {
                 <TrendingUp color="success" />
                 <Box>
                   <Typography variant="body2" color="text.secondary">
-                    Total Orders
+                    {t('adminProducts.totalOrders')}
                   </Typography>
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>
                     {stats.totalSales || 0}
@@ -280,7 +280,7 @@ const AdminProductsScreen: React.FC = () => {
                 <AttachMoney color="primary" />
                 <Box>
                   <Typography variant="body2" color="text.secondary">
-                    Total Order Value
+                    {t('adminProducts.totalOrderValue')}
                   </Typography>
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>
                     {currencySymbol}{(stats.totalRevenue || 0).toFixed(2)}
@@ -297,7 +297,7 @@ const AdminProductsScreen: React.FC = () => {
                 <CalendarToday color="info" />
                 <Box>
                   <Typography variant="body2" color="text.secondary">
-                    Monthly Order Value
+                    {t('adminProducts.monthlyOrderValue')}
                   </Typography>
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>
                     {currencySymbol}{(stats.monthlyRevenue || 0).toFixed(2)}
@@ -315,7 +315,7 @@ const AdminProductsScreen: React.FC = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-                Order Fulfillment Performance (Top 10 Staff)
+                {t('adminProducts.orderFulfillmentPerformance')}
               </Typography>
               {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
@@ -325,10 +325,10 @@ const AdminProductsScreen: React.FC = () => {
                 <Box sx={{ textAlign: 'center', py: 4 }}>
                   <TrendingUp sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
                   <Typography variant="body1" color="text.secondary">
-                    No order data available yet
+                    {t('adminProducts.noOrderData')}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                    Orders from clients will appear here
+                    {t('adminProducts.ordersWillAppear')}
                   </Typography>
                 </Box>
               ) : (
@@ -340,11 +340,11 @@ const AdminProductsScreen: React.FC = () => {
                     <Tooltip
                       formatter={(value: any) => [
                         `${currencySymbol}${Number(value || 0).toFixed(2)}`,
-                        'Order Value',
+                        t('adminProducts.orderValue'),
                       ]}
                     />
                     <Legend />
-                    <Bar dataKey="revenue" fill="#8884d8" name="Order Value" />
+                    <Bar dataKey="revenue" fill="#8884d8" name={t('adminProducts.orderValue')} />
                   </RechartsBarChart>
                 </ResponsiveContainer>
               )}
@@ -355,7 +355,7 @@ const AdminProductsScreen: React.FC = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-                Top Order Handlers
+                {t('adminProducts.topOrderHandlers')}
               </Typography>
               {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
@@ -365,7 +365,7 @@ const AdminProductsScreen: React.FC = () => {
                 <Box sx={{ textAlign: 'center', py: 4 }}>
                   <Person sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
                   <Typography variant="body2" color="text.secondary">
-                    No staff performance data yet
+                    {t('adminProducts.noStaffPerformance')}
                   </Typography>
                 </Box>
               ) : (
@@ -381,7 +381,7 @@ const AdminProductsScreen: React.FC = () => {
                             {staff.staffName}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {staff.salesCount || 0} orders
+                            {staff.salesCount || 0} {t('adminProducts.orders')}
                           </Typography>
                         </Box>
                         <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main' }}>
@@ -403,7 +403,7 @@ const AdminProductsScreen: React.FC = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-                Monthly Order Trends
+                {t('adminProducts.monthlyOrderTrends')}
               </Typography>
               {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
@@ -413,10 +413,10 @@ const AdminProductsScreen: React.FC = () => {
                 <Box sx={{ textAlign: 'center', py: 4 }}>
                   <BarChart sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
                   <Typography variant="body1" color="text.secondary">
-                    No monthly order data available
+                    {t('adminProducts.noMonthlyData')}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                    Order trends will appear here as orders are processed
+                    {t('adminProducts.trendsWillAppear')}
                   </Typography>
                 </Box>
               ) : (
@@ -427,15 +427,15 @@ const AdminProductsScreen: React.FC = () => {
                     <YAxis />
                     <Tooltip
                       formatter={(value: any, name: string) => {
-                        if (name === 'Order Value') {
-                          return [`${currencySymbol}${Number(value || 0).toFixed(2)}`, 'Order Value'];
+                        if (name === t('adminProducts.orderValue')) {
+                          return [`${currencySymbol}${Number(value || 0).toFixed(2)}`, t('adminProducts.orderValue')];
                         }
-                        return [value, 'Orders Count'];
+                        return [value, t('adminProducts.ordersCount')];
                       }}
                     />
                     <Legend />
-                    <Bar dataKey="revenue" fill="#82ca9d" name="Order Value" />
-                    <Bar dataKey="sales" fill="#8884d8" name="Orders Count" />
+                    <Bar dataKey="revenue" fill="#82ca9d" name={t('adminProducts.orderValue')} />
+                    <Bar dataKey="sales" fill="#8884d8" name={t('adminProducts.ordersCount')} />
                   </RechartsBarChart>
                 </ResponsiveContainer>
               )}
@@ -449,27 +449,27 @@ const AdminProductsScreen: React.FC = () => {
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              All Orders from Staff
+              {t('adminProducts.allOrdersFromStaff')}
             </Typography>
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
               <FormControl size="small" sx={{ minWidth: 180 }}>
-                <InputLabel>Filter by Status</InputLabel>
+                <InputLabel>{t('adminProducts.filterByStatus')}</InputLabel>
                 <Select
                   value={statusFilter}
-                  label="Filter by Status"
+                  label={t('adminProducts.filterByStatus')}
                   onChange={(e) => {
                     setStatusFilter(e.target.value as SaleStatus | '');
                     setOrdersPage(1);
                   }}
                 >
-                  <MenuItem value="">All Statuses</MenuItem>
-                  <MenuItem value="pending">Pending</MenuItem>
-                  <MenuItem value="in-progress">Processing</MenuItem>
-                  <MenuItem value="sold">Fulfilled</MenuItem>
-                  <MenuItem value="cancelled">Cancelled</MenuItem>
+                  <MenuItem value="">{t('adminProducts.allStatuses')}</MenuItem>
+                  <MenuItem value="pending">{t('adminProducts.pending')}</MenuItem>
+                  <MenuItem value="in-progress">{t('adminProducts.processing')}</MenuItem>
+                  <MenuItem value="sold">{t('adminProducts.fulfilled')}</MenuItem>
+                  <MenuItem value="cancelled">{t('adminProducts.cancelled')}</MenuItem>
                 </Select>
               </FormControl>
-              <IconButton onClick={fetchSales} title="Refresh Orders">
+              <IconButton onClick={fetchSales} title={t('adminProducts.refreshOrders')}>
                 <Refresh />
               </IconButton>
             </Box>
@@ -483,10 +483,10 @@ const AdminProductsScreen: React.FC = () => {
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <Inventory sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
               <Typography variant="body1" color="text.secondary">
-                No orders found
+                {t('adminProducts.noOrdersFound')}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                Orders created by staff will appear here
+                {t('adminProducts.ordersWillAppearHere')}
               </Typography>
             </Box>
           ) : (
@@ -495,15 +495,15 @@ const AdminProductsScreen: React.FC = () => {
                 <Table>
                   <TableHead>
                     <TableRow sx={{ backgroundColor: 'grey.50' }}>
-                      <TableCell sx={{ fontWeight: 600 }}>Product</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>Client / Customer</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>Contact</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>Staff Member</TableCell>
-                      <TableCell align="center" sx={{ fontWeight: 600 }}>Quantity</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 600 }}>Unit Price</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 600 }}>Total</TableCell>
-                      <TableCell align="center" sx={{ fontWeight: 600 }}>Status</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>Order Date</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>{t('adminProducts.product')}</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>{t('adminProducts.clientCustomer')}</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>{t('adminProducts.contact')}</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>{t('adminProducts.staffMember')}</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 600 }}>{t('adminProducts.quantity')}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>{t('adminProducts.unitPrice')}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>{t('adminProducts.total')}</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 600 }}>{t('adminProducts.status')}</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>{t('adminProducts.orderDate')}</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -522,7 +522,7 @@ const AdminProductsScreen: React.FC = () => {
                                 </Typography>
                                 {sale.product?.referenceNumber && (
                                   <Typography variant="caption" color="text.secondary">
-                                    Ref: {sale.product.referenceNumber}
+                                    {t('adminProducts.ref')}: {sale.product.referenceNumber}
                                   </Typography>
                                 )}
                               </Box>
@@ -589,10 +589,10 @@ const AdminProductsScreen: React.FC = () => {
                               onChange={(e) => handleUpdateOrderStatus(sale, e.target.value as SaleStatus)}
                               sx={{ minWidth: 130, borderRadius: 1 }}
                             >
-                              <MenuItem value="pending">Pending</MenuItem>
-                              <MenuItem value="in-progress">Processing</MenuItem>
-                              <MenuItem value="sold">Fulfilled</MenuItem>
-                              <MenuItem value="cancelled">Cancelled</MenuItem>
+                              <MenuItem value="pending">{t('adminProducts.pending')}</MenuItem>
+                              <MenuItem value="in-progress">{t('adminProducts.processing')}</MenuItem>
+                              <MenuItem value="sold">{t('adminProducts.fulfilled')}</MenuItem>
+                              <MenuItem value="cancelled">{t('adminProducts.cancelled')}</MenuItem>
                             </Select>
                           </TableCell>
                           <TableCell>
@@ -614,10 +614,10 @@ const AdminProductsScreen: React.FC = () => {
                       onClick={() => setOrdersPage(Math.max(1, ordersPage - 1))}
                       disabled={ordersPage === 1}
                     >
-                      Previous
+                      {t('adminProducts.previous')}
                     </Button>
                     <Typography variant="body2" sx={{ px: 2 }}>
-                      Page {ordersPage} of {Math.ceil(sales.length / itemsPerPage)}
+                      {t('adminProducts.page')} {ordersPage} {t('adminProducts.of')} {Math.ceil(sales.length / itemsPerPage)}
                     </Typography>
                     <Button
                       variant="outlined"
@@ -625,7 +625,7 @@ const AdminProductsScreen: React.FC = () => {
                       onClick={() => setOrdersPage(Math.min(Math.ceil(sales.length / itemsPerPage), ordersPage + 1))}
                       disabled={ordersPage >= Math.ceil(sales.length / itemsPerPage)}
                     >
-                      Next
+                      {t('adminProducts.next')}
                     </Button>
                   </Box>
                 </Box>
@@ -639,7 +639,7 @@ const AdminProductsScreen: React.FC = () => {
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-            Staff Order Fulfillment Performance
+            {t('adminProducts.staffOrderFulfillmentPerformance')}
           </Typography>
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
@@ -649,10 +649,10 @@ const AdminProductsScreen: React.FC = () => {
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <Person sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
               <Typography variant="body1" color="text.secondary">
-                No staff performance data available
+                {t('adminProducts.noPerformanceData')}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                Performance metrics will appear as staff members process orders
+                {t('adminProducts.metricsWillAppear')}
               </Typography>
             </Box>
           ) : (
@@ -660,11 +660,11 @@ const AdminProductsScreen: React.FC = () => {
               <Table>
                 <TableHead>
                   <TableRow sx={{ backgroundColor: 'grey.50' }}>
-                    <TableCell sx={{ fontWeight: 600 }}>Rank</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Staff Name</TableCell>
-                    <TableCell align="center" sx={{ fontWeight: 600 }}>Total Orders</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 600 }}>Total Order Value</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 600 }}>Average per Order</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{t('adminProducts.rank')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{t('adminProducts.staffName')}</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 600 }}>{t('adminProducts.totalOrders')}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600 }}>{t('adminProducts.totalOrderValue')}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600 }}>{t('adminProducts.averagePerOrder')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
