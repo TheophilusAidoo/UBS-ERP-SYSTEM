@@ -27,6 +27,7 @@ import {
   Tab,
   Paper,
   Stack,
+  Pagination,
 } from '@mui/material';
 import {
   AccessTime,
@@ -122,6 +123,10 @@ const AttendanceScreen: React.FC = () => {
     start: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0], // Start of year
     end: new Date().toISOString().split('T')[0], // Today
   });
+  
+  // Pagination state for staff list
+  const [staffPage, setStaffPage] = useState(1);
+  const staffPerPage = 9;
 
   const isAdmin = user?.role === 'admin';
   const isStaff = user?.role === 'staff';
@@ -572,6 +577,42 @@ const AttendanceScreen: React.FC = () => {
     return staff;
   };
 
+  // Get paginated staff for display (sorted: clocked-in first, then not clocked-in)
+  const getPaginatedStaff = () => {
+    const filtered = getFilteredStaff();
+    
+    // Sort: clocked-in staff first, then not clocked-in
+    const today = selectedFilterDate;
+    const sortedStaff = [...filtered].sort((a, b) => {
+      const aRecord = allAttendance.find(att => att.userId === a.id && att.date === today);
+      const bRecord = allAttendance.find(att => att.userId === b.id && att.date === today);
+      const aClockedIn = aRecord?.clockIn ? 1 : 0;
+      const bClockedIn = bRecord?.clockIn ? 1 : 0;
+      
+      // Clocked-in first (descending), then by name
+      if (aClockedIn !== bClockedIn) {
+        return bClockedIn - aClockedIn;
+      }
+      
+      // If same status, sort by name
+      const aName = `${a.firstName || ''} ${a.lastName || ''}`.trim() || a.email;
+      const bName = `${b.firstName || ''} ${b.lastName || ''}`.trim() || b.email;
+      return aName.localeCompare(bName);
+    });
+    
+    const startIndex = (staffPage - 1) * staffPerPage;
+    const endIndex = startIndex + staffPerPage;
+    return sortedStaff.slice(startIndex, endIndex);
+  };
+
+  // Calculate total pages
+  const totalStaffPages = Math.ceil(getFilteredStaff().length / staffPerPage);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setStaffPage(1);
+  }, [statusFilter, searchQuery, selectedFilterDate]);
+
   // Admin View - All Attendance
   if (isAdmin) {
     return (
@@ -818,7 +859,11 @@ const AttendanceScreen: React.FC = () => {
                 {t('attendance.staffMembers')}
               </Typography>
               <Chip 
-                label={`${getFilteredStaff().length} staff`} 
+                label={
+                  totalStaffPages > 1
+                    ? `Showing ${(staffPage - 1) * staffPerPage + 1}-${Math.min(staffPage * staffPerPage, getFilteredStaff().length)} of ${getFilteredStaff().length} staff`
+                    : `${getFilteredStaff().length} staff`
+                }
                 size="small" 
                 sx={{ ml: 'auto' }}
               />
@@ -832,9 +877,10 @@ const AttendanceScreen: React.FC = () => {
                 </Typography>
               </Box>
             ) : (
-              <Grid container spacing={2}>
-                {getFilteredStaff().map((staff) => (
-                <Grid item xs={12} sm={6} md={4} key={staff.id}>
+              <>
+                <Grid container spacing={2}>
+                  {getPaginatedStaff().map((staff) => (
+                  <Grid item xs={12} sm={6} md={4} key={staff.id}>
                   <Paper
                     sx={{
                       p: 2,
@@ -896,7 +942,21 @@ const AttendanceScreen: React.FC = () => {
                   </Paper>
                 </Grid>
                   ))}
-              </Grid>
+                </Grid>
+                {totalStaffPages > 1 && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                    <Pagination
+                      count={totalStaffPages}
+                      page={staffPage}
+                      onChange={(event, value) => setStaffPage(value)}
+                      color="primary"
+                      size="large"
+                      showFirstButton
+                      showLastButton
+                    />
+                  </Box>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -910,7 +970,11 @@ const AttendanceScreen: React.FC = () => {
                 {t('attendance.allStaffAttendance')}
               </Typography>
               <Chip 
-                label={`${getFilteredStaff().length} staff`} 
+                label={
+                  totalStaffPages > 1
+                    ? `Showing ${(staffPage - 1) * staffPerPage + 1}-${Math.min(staffPage * staffPerPage, getFilteredStaff().length)} of ${getFilteredStaff().length} staff`
+                    : `${getFilteredStaff().length} staff`
+                }
                 size="small" 
                 sx={{ ml: 'auto' }}
               />
@@ -929,7 +993,8 @@ const AttendanceScreen: React.FC = () => {
                 </Typography>
               </Box>
             ) : (
-              <TableContainer>
+              <>
+                <TableContainer>
                 <Table>
                   <TableHead>
                     <TableRow sx={{ backgroundColor: 'action.hover' }}>
@@ -943,21 +1008,79 @@ const AttendanceScreen: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {getFilteredStaff().map((staff) => {
-                      // Find attendance record for this staff member on the selected date
-                      const attendanceRecord = allAttendance.find(
-                        a => a.userId === staff.id && a.date === selectedFilterDate
-                      );
+                    {(() => {
+                      const paginatedStaff = getPaginatedStaff();
+                      const hasClockedIn = paginatedStaff.some(staff => {
+                        const record = allAttendance.find(a => a.userId === staff.id && a.date === selectedFilterDate);
+                        return !!record?.clockIn;
+                      });
+                      const hasNotClockedIn = paginatedStaff.some(staff => {
+                        const record = allAttendance.find(a => a.userId === staff.id && a.date === selectedFilterDate);
+                        return !record?.clockIn;
+                      });
+                      let clockedInHeaderShown = false;
                       
-                      return (
-                        <TableRow 
-                          key={staff.id} 
-                          hover
-                          sx={{
-                            '&:last-child td': { borderBottom: 0 },
-                            backgroundColor: attendanceRecord?.clockIn ? 'rgba(22, 163, 74, 0.05)' : 'transparent',
-                          }}
-                        >
+                      return paginatedStaff.map((staff, index) => {
+                        // Find attendance record for this staff member on the selected date
+                        const attendanceRecord = allAttendance.find(
+                          a => a.userId === staff.id && a.date === selectedFilterDate
+                        );
+                        const isClockedIn = !!attendanceRecord?.clockIn;
+                        
+                        // Show "Clocked In" header before first clocked-in staff
+                        const showClockedInHeader = hasClockedIn && hasNotClockedIn && isClockedIn && !clockedInHeaderShown;
+                        if (showClockedInHeader) clockedInHeaderShown = true;
+                        
+                        // Check if this is the first not-clocked-in staff (for separator)
+                        const prevStaff = index > 0 ? paginatedStaff[index - 1] : null;
+                        const prevRecord = prevStaff ? allAttendance.find(
+                          a => a.userId === prevStaff.id && a.date === selectedFilterDate
+                        ) : null;
+                        const showSeparator = index > 0 && prevRecord?.clockIn && !isClockedIn;
+                      
+                        return (
+                          <React.Fragment key={staff.id}>
+                            {showClockedInHeader && (
+                              <TableRow>
+                                <TableCell colSpan={7} sx={{ py: 1.5, backgroundColor: 'rgba(22, 163, 74, 0.1)', borderTop: '2px solid rgba(22, 163, 74, 0.3)' }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <CheckCircle sx={{ color: 'success.main' }} />
+                                    <Typography variant="subtitle2" sx={{ fontWeight: 600, color: 'success.main' }}>
+                                      Clocked In Staff
+                                    </Typography>
+                                  </Box>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                            {showSeparator && (
+                              <TableRow>
+                                <TableCell colSpan={7} sx={{ py: 1.5, backgroundColor: 'rgba(211, 47, 47, 0.1)', borderTop: '2px solid rgba(211, 47, 47, 0.3)' }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Cancel sx={{ color: 'error.main' }} />
+                                    <Typography variant="subtitle2" sx={{ fontWeight: 600, color: 'error.main' }}>
+                                      Not Clocked In Staff
+                                    </Typography>
+                                  </Box>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          <TableRow 
+                            hover
+                            sx={{
+                              '&:last-child td': { borderBottom: 0 },
+                              backgroundColor: isClockedIn 
+                                ? 'rgba(22, 163, 74, 0.08)' 
+                                : 'rgba(211, 47, 47, 0.05)',
+                              borderLeft: isClockedIn 
+                                ? '4px solid rgba(22, 163, 74, 0.5)' 
+                                : '4px solid rgba(211, 47, 47, 0.3)',
+                              '&:hover': {
+                                backgroundColor: isClockedIn 
+                                  ? 'rgba(22, 163, 74, 0.12)' 
+                                  : 'rgba(211, 47, 47, 0.08)',
+                              },
+                            }}
+                          >
                           <TableCell>
                             <Box>
                               <Typography variant="body1" sx={{ fontWeight: 500 }}>
@@ -1036,11 +1159,27 @@ const AttendanceScreen: React.FC = () => {
                             )}
                           </TableCell>
                         </TableRow>
-                      );
-                    })}
+                          </React.Fragment>
+                        );
+                      });
+                    })()}
                   </TableBody>
                 </Table>
               </TableContainer>
+                {totalStaffPages > 1 && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 3, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+                    <Pagination
+                      count={totalStaffPages}
+                      page={staffPage}
+                      onChange={(event, value) => setStaffPage(value)}
+                      color="primary"
+                      size="large"
+                      showFirstButton
+                      showLastButton
+                    />
+                  </Box>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

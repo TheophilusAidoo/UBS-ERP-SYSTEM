@@ -29,6 +29,8 @@ import {
   Person,
   Dashboard,
   Close,
+  Download,
+  PictureAsPdf,
 } from '@mui/icons-material';
 import { clientService } from '../../services/client.service';
 import { messageService, CreateMessageData } from '../../services/message.service';
@@ -51,6 +53,7 @@ const ClientMessagesScreen: React.FC = () => {
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
+  const [previewPdf, setPreviewPdf] = useState<{ url: string; name: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Initialize global settings to get the primary color
@@ -447,17 +450,31 @@ const ClientMessagesScreen: React.FC = () => {
                                     </>
                                   ) : (
                                     <>
-                                      <Box sx={{ 
-                                        width: 80, 
-                                        height: 80, 
-                                        display: 'flex', 
-                                        alignItems: 'center', 
-                                        justifyContent: 'center',
-                                        backgroundColor: isFromClient ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-                                        borderRadius: 2,
-                                      }}>
-                                        <Typography sx={{ fontSize: 24, color: isFromClient ? 'rgba(255,255,255,0.8)' : 'text.secondary' }}>📄</Typography>
-                                      </Box>
+                                      {attachment.name.toLowerCase().endsWith('.pdf') ? (
+                                        <Box sx={{ 
+                                          width: 80, 
+                                          height: 80, 
+                                          display: 'flex', 
+                                          alignItems: 'center', 
+                                          justifyContent: 'center',
+                                          backgroundColor: isFromClient ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                                          borderRadius: 2,
+                                        }}>
+                                          <PictureAsPdf sx={{ fontSize: 40, color: isFromClient ? 'rgba(255,255,255,0.9)' : '#d32f2f' }} />
+                                        </Box>
+                                      ) : (
+                                        <Box sx={{ 
+                                          width: 80, 
+                                          height: 80, 
+                                          display: 'flex', 
+                                          alignItems: 'center', 
+                                          justifyContent: 'center',
+                                          backgroundColor: isFromClient ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                                          borderRadius: 2,
+                                        }}>
+                                          <Typography sx={{ fontSize: 24, color: isFromClient ? 'rgba(255,255,255,0.8)' : 'text.secondary' }}>📄</Typography>
+                                        </Box>
+                                      )}
                                       <Box sx={{ flex: 1, minWidth: 0 }}>
                                         <Typography variant="caption" sx={{ display: 'block', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isFromClient ? 'rgba(255,255,255,0.9)' : 'text.primary' }}>
                                           {attachment.name}
@@ -467,6 +484,39 @@ const ClientMessagesScreen: React.FC = () => {
                                             {(attachment.size / 1024).toFixed(1)} KB
                                           </Typography>
                                         )}
+                                        {attachment.name.toLowerCase().endsWith('.pdf') && (
+                                          <Typography variant="caption" sx={{ opacity: isFromClient ? 0.8 : 0.7, color: isFromClient ? 'rgba(255,255,255,0.8)' : 'text.secondary', display: 'block', mt: 0.5 }}>
+                                            PDF • Click to preview or download
+                                          </Typography>
+                                        )}
+                                      </Box>
+                                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                        {attachment.name.toLowerCase().endsWith('.pdf') && (
+                                          <IconButton
+                                            size="small"
+                                            onClick={() => setPreviewPdf({ url: attachment.url, name: attachment.name })}
+                                            sx={{ color: isFromClient ? 'rgba(255,255,255,0.8)' : 'text.secondary' }}
+                                            title="Preview PDF"
+                                          >
+                                            <PictureAsPdf fontSize="small" />
+                                          </IconButton>
+                                        )}
+                                        <IconButton
+                                          size="small"
+                                          onClick={() => {
+                                            const link = document.createElement('a');
+                                            link.href = attachment.url;
+                                            link.download = attachment.name;
+                                            link.target = '_blank';
+                                            document.body.appendChild(link);
+                                            link.click();
+                                            document.body.removeChild(link);
+                                          }}
+                                          sx={{ color: isFromClient ? 'rgba(255,255,255,0.8)' : 'text.secondary' }}
+                                          title="Download"
+                                        >
+                                          <Download fontSize="small" />
+                                        </IconButton>
                                       </Box>
                                     </>
                                   )}
@@ -631,6 +681,83 @@ const ClientMessagesScreen: React.FC = () => {
                   objectFit: 'contain',
                   borderRadius: 8,
                 }}
+              />
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* PDF Preview Dialog */}
+      <Dialog
+        open={!!previewPdf}
+        onClose={() => setPreviewPdf(null)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: {
+            maxHeight: '95vh',
+          },
+        }}
+      >
+        <DialogTitle sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          pb: 1,
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <PictureAsPdf sx={{ color: '#d32f2f' }} />
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              {previewPdf?.name || 'PDF Preview'}
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {previewPdf && (
+              <IconButton
+                onClick={() => {
+                  const link = document.createElement('a');
+                  link.href = previewPdf.url;
+                  link.download = previewPdf.name;
+                  link.target = '_blank';
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                }}
+                sx={{ '&:hover': { backgroundColor: 'action.hover' } }}
+                title="Download PDF"
+              >
+                <Download />
+              </IconButton>
+            )}
+            <IconButton
+              onClick={() => setPreviewPdf(null)}
+              sx={{ '&:hover': { backgroundColor: 'action.hover' } }}
+            >
+              <Close />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ 
+          p: 0,
+          height: '85vh',
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
+          {previewPdf && (
+            <Box sx={{ 
+              flex: 1,
+              width: '100%',
+              height: '100%',
+              border: 'none',
+            }}>
+              <iframe
+                src={previewPdf.url}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                }}
+                title={previewPdf.name}
               />
             </Box>
           )}
