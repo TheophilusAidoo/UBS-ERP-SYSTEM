@@ -66,11 +66,54 @@ class ClientService {
       throw new Error('Invalid email format');
     }
 
-    // If password is provided, create an auth user for the client with auto-confirmation
-    let clientAuthUserId: string | undefined;
-    // Only create auth user if password is provided and not empty
+    // Auto-generate password if not provided - client should always receive credentials
+    let clientPassword: string;
     if (data.password && typeof data.password === 'string' && data.password.trim().length > 0) {
-      const password = data.password.trim();
+      clientPassword = data.password.trim();
+    } else {
+      // Generate a secure random password (16 characters: uppercase, lowercase, numbers, special chars)
+      const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // Excluded I and O to avoid confusion
+      const lowercase = 'abcdefghijkmnpqrstuvwxyz'; // Excluded l and o
+      const numbers = '23456789'; // Excluded 0 and 1
+      const special = '!@#$%&*?+-='; // Common special characters
+      
+      const getRandomChar = (str: string) => str[Math.floor(Math.random() * str.length)];
+      
+      // Build a strong password: at least 2 of each type for 16+ characters
+      let password = 
+        getRandomChar(uppercase) + 
+        getRandomChar(uppercase) + 
+        getRandomChar(lowercase) + 
+        getRandomChar(lowercase) + 
+        getRandomChar(numbers) + 
+        getRandomChar(numbers) + 
+        getRandomChar(special) + 
+        getRandomChar(special);
+      
+      // Add more random characters to reach 16 characters total
+      const allChars = uppercase + lowercase + numbers + special;
+      for (let i = password.length; i < 16; i++) {
+        password += getRandomChar(allChars);
+      }
+      
+      // Shuffle the password thoroughly to randomize character positions
+      password = password.split('').sort(() => Math.random() - 0.5).join('');
+      password = password.split('').sort(() => Math.random() - 0.5).join(''); // Shuffle again
+      
+      clientPassword = password;
+      console.log('🔐 Auto-generated password for client:', data.email);
+    }
+
+    // Validate password strength
+    if (clientPassword.length < 6) {
+      throw new Error('Password must be at least 6 characters long');
+    }
+
+    // Create an auth user for the client with auto-confirmation
+    let clientAuthUserId: string | undefined;
+    // Always create auth user since we now always have a password
+    {
+      const password = clientPassword;
       // Only check Supabase's minimum requirement (6 characters)
       if (password.length < 6) {
         throw new Error('Password must be at least 6 characters long');
@@ -90,7 +133,7 @@ class ClientService {
           
           const { data: adminUserData, error: adminError } = await adminClient.auth.admin.createUser({
             email: normalizedEmail,
-            password: data.password, // Use the exact password provided
+            password: clientPassword, // Use the password (provided or auto-generated)
             email_confirm: true, // Auto-confirm email
             user_metadata: {
               role: 'client',
@@ -137,10 +180,10 @@ class ClientService {
                   console.log('🔄 Updating password and confirming email for existing auth user...');
                   const { data: updateData, error: updateError } = await adminClient.auth.admin.updateUserById(
                     existingUser.id,
-                    { 
-                      password: data.password,
-                      email_confirm: true // IMPORTANT: Confirm email so user can login immediately
-                    }
+                      { 
+                        password: clientPassword,
+                        email_confirm: true // IMPORTANT: Confirm email so user can login immediately
+                      }
                   );
                   
                   if (updateError) {
@@ -218,7 +261,7 @@ class ClientService {
           
           const { data: authClientData, error: authClientError } = await supabase.auth.signUp({
             email: normalizedEmail, // Use normalized email
-            password: data.password,
+            password: clientPassword,
             options: {
               data: {
                 role: 'client',
@@ -246,7 +289,7 @@ class ClientService {
                       const { error: updateError } = await adminClientForExisting.auth.admin.updateUserById(
                         existingUser.id,
                         { 
-                          password: data.password,
+                          password: clientPassword,
                           email_confirm: true // Confirm email
                         }
                       );
@@ -481,97 +524,106 @@ class ClientService {
 
     const mappedClient = this.mapClientFromDB(client);
 
-    // Send welcome email via cPanel if password was provided
-    // IMPORTANT: Send email if password was provided, regardless of auth_user_id status
-    // This ensures the client gets their credentials even if auth_user_id wasn't set
-    if (data.password) {
-      try {
-        const companyName = mappedClient.company?.name || 'UBS ERP';
-        const loginUrl = window.location.origin + '/login';
-        
-        // Warn if auth_user_id is missing (client might not be able to log in)
-        const authWarning = !clientAuthUserId 
-          ? '<p style="color: #dc2626; font-weight: bold;">⚠️ IMPORTANT: Your account may need to be activated. If you cannot log in, please contact support.</p>'
-          : '';
-        
-        const welcomeEmailHtml = `
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <meta charset="utf-8">
-              <style>
-                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%); color: white; padding: 30px; border-radius: 8px 8px 0 0; text-align: center; }
-                .content { background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; }
-                .credentials { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #0ea5e9; }
-                .button { display: inline-block; padding: 12px 30px; background: #0ea5e9; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }
-                .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 0.9em; }
-              </style>
-            </head>
-            <body>
-              <div class="container">
-                <div class="header">
-                  <h1>Welcome to ${companyName}!</h1>
-                </div>
-                <div class="content">
-                  <p>Dear ${data.name},</p>
-                  <p>Your client account has been created successfully. You can now access the UBS ERP portal to view your invoices, proposals, and project information.</p>
-                  
-                  ${authWarning}
-                  
-                  <div class="credentials">
-                    <h3 style="margin-top: 0;">Your Login Credentials:</h3>
-                    <p><strong>Email:</strong> ${data.email}</p>
-                    <p><strong>Password:</strong> <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: monospace;">${data.password}</code></p>
-                    <p style="color: #dc2626; font-size: 0.9em; margin-top: 15px;">
-                      ⚠️ Please save this password and change it after first login for security.
-                    </p>
-                  </div>
-                  
-                  <p style="text-align: center;">
-                    <a href="${loginUrl}" class="button">Login to Portal</a>
-                  </p>
-                  
-                  <p>From the portal, you can:</p>
-                  <ul>
-                    <li>View and download your invoices</li>
-                    <li>Access proposals and estimates</li>
-                    <li>Track project progress</li>
-                    <li>Communicate with our team</li>
-                  </ul>
-                  
-                  <p>If you have any questions or cannot log in, please contact your account manager or support team.</p>
-                  
-                  <p>Best regards,<br>${companyName} Team</p>
-                </div>
-                <div class="footer">
-                  <p>This is an automated email from UBS ERP System</p>
-                </div>
+    // ALWAYS send welcome email with credentials to the client
+    // This ensures the client always receives their login credentials
+    try {
+      const companyName = mappedClient.company?.name || 'UBS ERP';
+      // ALWAYS use production URL for email links (hardcoded to prevent localhost)
+      const loginUrl = 'https://ubscrm.com/login';
+      
+      // Warn if auth_user_id is missing (client might not be able to log in)
+      const authWarning = !clientAuthUserId 
+        ? '<p style="color: #dc2626; font-weight: bold;">⚠️ IMPORTANT: Your account may need to be activated. If you cannot log in, please contact support.</p>'
+        : '';
+      
+      const welcomeEmailHtml = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%); color: white; padding: 30px; border-radius: 8px 8px 0 0; text-align: center; }
+              .content { background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; }
+              .credentials { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #0ea5e9; }
+              .button { display: inline-block; padding: 12px 30px; background: #0ea5e9; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+              .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 0.9em; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>Welcome to ${companyName}!</h1>
               </div>
-            </body>
-          </html>
-        `;
+              <div class="content">
+                <p>Dear ${data.name},</p>
+                <p>Your client account has been created successfully. You can now access the UBS ERP portal to view your invoices, proposals, and project information.</p>
+                
+                ${authWarning}
+                
+                <div class="credentials">
+                  <h3 style="margin-top: 0;">Your Login Credentials:</h3>
+                  <p><strong>Email:</strong> ${data.email}</p>
+                  <p><strong>Password:</strong> <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: monospace;">${clientPassword}</code></p>
+                  <p style="color: #dc2626; font-size: 0.9em; margin-top: 15px;">
+                    ⚠️ Please save this password and change it after first login for security.
+                  </p>
+                </div>
+                
+                <p style="text-align: center;">
+                  <a href="${loginUrl}" class="button">Login to Portal</a>
+                </p>
+                
+                <p>From the portal, you can:</p>
+                <ul>
+                  <li>View and download your invoices</li>
+                  <li>Access proposals and estimates</li>
+                  <li>Track project progress</li>
+                  <li>Communicate with our team</li>
+                </ul>
+                
+                <p>If you have any questions or cannot log in, please contact your account manager or support team.</p>
+                
+                <p>Best regards,<br>${companyName} Team</p>
+              </div>
+              <div class="footer">
+                <p>This is an automated email from UBS ERP System</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `;
 
-        await emailService.sendEmail({
-          to: data.email,
-          subject: `Welcome to ${companyName} - Client Portal Access`,
-          html: welcomeEmailHtml,
-        });
+      const emailResult = await emailService.sendEmail({
+        to: data.email,
+        subject: `Welcome to ${companyName} - Client Portal Access`,
+        html: welcomeEmailHtml,
+      });
 
-        console.log('✅ Client welcome email sent via cPanel to:', data.email);
-        if (!clientAuthUserId) {
-          console.warn('⚠️ Email sent but auth_user_id is missing - client login may not work until auth user is created');
-        }
-      } catch (emailError) {
-        // Log but don't fail client creation if email fails
-        console.error('❌ Failed to send client welcome email:', emailError);
-        // Throw error so the caller knows email failed
-        throw new Error(`Client created successfully, but failed to send welcome email. Password: ${data.password}. Please send credentials to client manually.`);
+      if (emailResult.success) {
+        console.log('✅ Client welcome email sent successfully to:', data.email);
+      } else {
+        console.error('❌ Failed to send client welcome email:', emailResult.message);
+        // Log error but don't fail client creation - credentials are still available
+        console.warn('⚠️ Client created but email failed. Password:', clientPassword);
+        // Store password in console for manual sending if needed
+        console.warn('⚠️ MANUAL ACTION REQUIRED: Send credentials to client manually');
+        console.warn(`   Email: ${data.email}`);
+        console.warn(`   Password: ${clientPassword}`);
       }
-    } else if (clientAuthUserId) {
-      // If no password provided but auth_user_id exists, warn that client needs password reset
-      console.warn('⚠️ Client has auth_user_id but no password was provided - client will need to reset password to log in');
+      
+      if (!clientAuthUserId) {
+        console.warn('⚠️ Email sent but auth_user_id is missing - client login may not work until auth user is created');
+      }
+    } catch (emailError: any) {
+      // Log but don't fail client creation if email fails
+      console.error('❌ Failed to send client welcome email:', emailError?.message || emailError);
+      console.warn('⚠️ Client created successfully, but email sending failed');
+      console.warn('⚠️ MANUAL ACTION REQUIRED: Send credentials to client manually');
+      console.warn(`   Email: ${data.email}`);
+      console.warn(`   Password: ${clientPassword}`);
+      // Don't throw - client creation succeeded, email is secondary
     }
 
     return mappedClient;

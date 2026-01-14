@@ -101,7 +101,7 @@ const initialState = {
   loginBackgroundColor: '#2563eb',
   loginBackgroundImage: null as string | null,
   loginLogo: null as string | null,
-  sidebarColor: '#2563eb',
+  sidebarColor: '#ffffff',
   sidebarLogo: null as string | null,
   favicon: null as string | null,
   themeMode: 'light' as ThemeMode,
@@ -114,10 +114,75 @@ export const useGlobalSettingsStore = create<GlobalSettings>((set) => ({
   
   initializeSettings: async () => {
     try {
+      // Check cache first (5 minute cache for faster loading)
+      const cacheKey = 'ubs_erp_global_settings_cache';
+      const cacheTimestampKey = 'ubs_erp_global_settings_cache_timestamp';
+      const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+      
+      const cachedTimestamp = localStorage.getItem(cacheTimestampKey);
+      const cachedSettings = localStorage.getItem(cacheKey);
+      
+      if (cachedSettings && cachedTimestamp) {
+        const age = Date.now() - parseInt(cachedTimestamp, 10);
+        if (age < CACHE_DURATION) {
+          // Use cached settings for instant load
+          try {
+            const settings = JSON.parse(cachedSettings);
+            set({
+              currency: (parseSetting('currency', settings.currency, 'USD') as Currency),
+              currencySymbol: parseSetting('currency_symbol', settings.currency_symbol, '$'),
+              defaultAnnualLeave: parseSetting('default_annual_leave', settings.default_annual_leave, 20),
+              defaultSickLeave: parseSetting('default_sick_leave', settings.default_sick_leave, 10),
+              defaultEmergencyLeave: parseSetting('default_emergency_leave', settings.default_emergency_leave, 5),
+              loginBackgroundColor: parseSetting('login_background_color', settings.login_background_color, '#2563eb'),
+              loginBackgroundImage: parseSetting('login_background_image', settings.login_background_image, null),
+              loginLogo: parseSetting('login_logo', settings.login_logo, null),
+              sidebarColor: parseSetting('sidebar_color', settings.sidebar_color, '#ffffff'),
+              sidebarLogo: parseSetting('sidebar_logo', settings.sidebar_logo, null),
+              favicon: parseSetting('favicon', settings.favicon, null),
+              themeMode: (parseSetting('theme_mode', settings.theme_mode, 'light') as ThemeMode),
+              primaryColor: (parseSetting('primary_color', settings.primary_color, 'blue') as PrimaryColor),
+              isLoading: false,
+            });
+            // Refresh in background without blocking UI
+            globalSettingsService.getAllSettings().then(settings => {
+              if (Object.keys(settings).length > 0) {
+                localStorage.setItem(cacheKey, JSON.stringify(settings));
+                localStorage.setItem(cacheTimestampKey, Date.now().toString());
+                set({
+                  currency: (parseSetting('currency', settings.currency, 'USD') as Currency),
+                  currencySymbol: parseSetting('currency_symbol', settings.currency_symbol, '$'),
+                  defaultAnnualLeave: parseSetting('default_annual_leave', settings.default_annual_leave, 20),
+                  defaultSickLeave: parseSetting('default_sick_leave', settings.default_sick_leave, 10),
+                  defaultEmergencyLeave: parseSetting('default_emergency_leave', settings.default_emergency_leave, 5),
+                  loginBackgroundColor: parseSetting('login_background_color', settings.login_background_color, '#2563eb'),
+                  loginBackgroundImage: parseSetting('login_background_image', settings.login_background_image, null),
+                  loginLogo: parseSetting('login_logo', settings.login_logo, null),
+                  sidebarColor: parseSetting('sidebar_color', settings.sidebar_color, '#ffffff'),
+                  sidebarLogo: parseSetting('sidebar_logo', settings.sidebar_logo, null),
+                  favicon: parseSetting('favicon', settings.favicon, null),
+                  themeMode: (parseSetting('theme_mode', settings.theme_mode, 'light') as ThemeMode),
+                  primaryColor: (parseSetting('primary_color', settings.primary_color, 'blue') as PrimaryColor),
+                });
+              }
+            }).catch(() => {
+              // Silently fail background refresh
+            });
+            return;
+          } catch (e) {
+            // Cache parse error, continue to fetch fresh
+          }
+        }
+      }
+      
       set({ isLoading: true });
       const settings = await globalSettingsService.getAllSettings();
       
       if (Object.keys(settings).length > 0) {
+        // Cache settings for faster next load
+        localStorage.setItem(cacheKey, JSON.stringify(settings));
+        localStorage.setItem(cacheTimestampKey, Date.now().toString());
+        
         set({
           currency: (parseSetting('currency', settings.currency, 'USD') as Currency),
           currencySymbol: parseSetting('currency_symbol', settings.currency_symbol, '$'),
@@ -127,7 +192,7 @@ export const useGlobalSettingsStore = create<GlobalSettings>((set) => ({
           loginBackgroundColor: parseSetting('login_background_color', settings.login_background_color, '#2563eb'),
           loginBackgroundImage: parseSetting('login_background_image', settings.login_background_image, null),
           loginLogo: parseSetting('login_logo', settings.login_logo, null),
-          sidebarColor: parseSetting('sidebar_color', settings.sidebar_color, '#2563eb'),
+          sidebarColor: parseSetting('sidebar_color', settings.sidebar_color, '#ffffff'),
           sidebarLogo: parseSetting('sidebar_logo', settings.sidebar_logo, null),
           favicon: parseSetting('favicon', settings.favicon, null),
           themeMode: (parseSetting('theme_mode', settings.theme_mode, 'light') as ThemeMode),

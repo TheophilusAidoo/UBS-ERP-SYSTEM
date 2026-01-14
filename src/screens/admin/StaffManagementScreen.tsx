@@ -252,11 +252,23 @@ const StaffManagementScreen: React.FC = () => {
         // Create staff - this is the essential operation that must complete
         const newStaff = await staffService.createStaff(createData);
         
+        // Check if company assignment was skipped (staff created but without company)
+        const companyWasSkipped = formData.companyId && formData.companyId.trim() !== '' && !newStaff.companyId;
+        
         // Immediately provide feedback to user
         setLoading(false);
         handleCloseDialog();
-        setSuccess(`✅ Staff member created successfully!\n\nThey can now login immediately with:\n📧 Email: ${formData.email}\n🔑 Password: ${formData.password}\n\nNote: Make sure "Enable email confirmations" is disabled in Supabase Dashboard > Authentication > Settings for immediate login.`);
-        setTimeout(() => setSuccess(null), 5000);
+        
+        let successMessage = `✅ Staff member created successfully!\n\nThey can now login immediately with:\n📧 Email: ${formData.email}\n🔑 Password: ${formData.password}`;
+        
+        if (companyWasSkipped) {
+          successMessage += `\n\n⚠️ Note: Company assignment was skipped due to permissions. You can assign a company later by editing the staff member.`;
+        }
+        
+        successMessage += `\n\nNote: Make sure "Enable email confirmations" is disabled in Supabase Dashboard > Authentication > Settings for immediate login.`;
+        
+        setSuccess(successMessage);
+        setTimeout(() => setSuccess(null), 6000);
         
         // Refresh staff list in background (non-blocking)
         (async () => {

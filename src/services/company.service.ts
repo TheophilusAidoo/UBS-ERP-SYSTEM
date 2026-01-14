@@ -7,6 +7,8 @@ export interface CreateCompanyData {
   phone?: string;
   email?: string;
   logo?: string;
+  website?: string;
+  taxId?: string;
   isActive?: boolean;
 }
 
@@ -17,6 +19,8 @@ export interface UpdateCompanyData {
   phone?: string;
   email?: string;
   logo?: string;
+  website?: string;
+  taxId?: string;
   isActive?: boolean;
 }
 
@@ -97,6 +101,8 @@ class CompanyService {
         phone: data.phone,
         email: data.email,
         logo: data.logo,
+        website: data.website,
+        tax_id: data.taxId,
         is_active: data.isActive !== undefined ? data.isActive : true,
       })
       .select()
@@ -111,6 +117,8 @@ class CompanyService {
       phone: company.phone,
       email: company.email,
       logo: company.logo,
+      website: company.website,
+      taxId: company.tax_id || company.taxId,
       isActive: company.is_active,
       createdAt: company.created_at,
       updatedAt: company.updated_at,
@@ -127,6 +135,8 @@ class CompanyService {
     if (data.logo !== undefined) {
       updateData.logo = data.logo && data.logo.trim() !== '' ? data.logo : null;
     }
+    if (data.website !== undefined) updateData.website = data.website;
+    if (data.taxId !== undefined) updateData.tax_id = data.taxId;
     if (data.isActive !== undefined) updateData.is_active = data.isActive;
     updateData.updated_at = new Date().toISOString();
 
@@ -146,6 +156,8 @@ class CompanyService {
       phone: company.phone,
       email: company.email,
       logo: company.logo,
+      website: company.website,
+      taxId: company.tax_id || company.taxId,
       isActive: company.is_active,
       createdAt: company.created_at,
       updatedAt: company.updated_at,
@@ -195,6 +207,8 @@ class CompanyService {
       phone: item.phone,
       email: item.email,
       logo: item.logo,
+      website: item.website,
+      taxId: item.tax_id || item.taxId,
       isActive: item.is_active,
       createdAt: item.created_at,
       updatedAt: item.updated_at,

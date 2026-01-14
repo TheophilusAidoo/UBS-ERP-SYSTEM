@@ -5,7 +5,9 @@
   "main": "email-server.js",
   "scripts": {
     "start": "node email-server.js",
-    "dev": "nodemon email-server.js"
+    "dev": "nodemon email-server.js",
+    "restart": "pkill -f 'email-server.js' 2>/dev/null; pkill -f 'app.cjs' 2>/dev/null; lsof -ti:3001 | xargs kill -9 2>/dev/null; sleep 1; node email-server.js",
+    "kill": "pkill -f 'email-server.js' 2>/dev/null; pkill -f 'app.cjs' 2>/dev/null; lsof -ti:3001 | xargs kill -9 2>/dev/null; echo '✅ Killed all email server processes'"
   },
   "dependencies": {
     "cors": "^2.8.5",

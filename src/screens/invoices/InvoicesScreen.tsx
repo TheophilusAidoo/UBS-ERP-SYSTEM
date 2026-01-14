@@ -36,6 +36,7 @@ import {
   FormControlLabel,
   Collapse,
   InputAdornment,
+  Autocomplete,
 } from '@mui/material';
 import {
   Receipt,
@@ -74,6 +75,7 @@ import { currencyConversionService } from '../../services/currency-conversion.se
 import { financialService } from '../../services/financial.service';
 import { Invoice, InvoiceItem, InvoiceStatus, Company } from '../../types';
 import ESignature from '../../components/invoices/ESignature';
+import { validateEmail } from '../../utils/helpers';
 
 const InvoicesScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -82,6 +84,8 @@ const InvoicesScreen: React.FC = () => {
   const { currency, getCurrencySymbol } = useGlobalSettingsStore();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
+  const [loadingClients, setLoadingClients] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -114,13 +118,14 @@ const InvoicesScreen: React.FC = () => {
 
   const [formData, setFormData] = useState({
     companyId: '',
+    selectedClientId: '', // Selected client from dropdown (empty string means "new client")
     clientName: '',
     clientEmail: '',
     clientNumber: '',
     clientCountry: '',
     invoiceNumber: '',
     dueDate: '',
-    tax: '0',
+    taxPercentage: '0', // Tax as percentage (e.g., 10 for 10%)
     currency: 'USD', // Default currency
     items: [] as Array<Omit<InvoiceItem, 'id'>>,
     signature: '',
@@ -140,6 +145,14 @@ const InvoicesScreen: React.FC = () => {
     fetchInvoices();
     fetchCompanies(); // Both admin and staff need companies for logo
   }, [statusFilter, companyFilter]);
+
+  // Fetch clients when company changes in the form (only when dialog is open)
+  useEffect(() => {
+    if (formData.companyId && dialogOpen) {
+      console.log('🔄 Fetching clients for company:', formData.companyId);
+      fetchClients(formData.companyId);
+    }
+  }, [formData.companyId, dialogOpen]);
 
   const fetchInvoices = async () => {
     try {
@@ -176,18 +189,46 @@ const InvoicesScreen: React.FC = () => {
     }
   };
 
+  const fetchClients = async (companyId?: string) => {
+    if (!companyId) {
+      setClients([]);
+      return;
+    }
+    try {
+      setLoadingClients(true);
+      console.log('🔄 Fetching clients for company:', companyId);
+      const data = await clientService.getAllClients({ 
+        companyId,
+        isActive: true 
+      });
+      console.log('✅ Fetched clients:', data.length);
+      setClients(data || []);
+    } catch (err: any) {
+      console.error('❌ Error fetching clients:', err);
+      setClients([]);
+    } finally {
+      setLoadingClients(false);
+    }
+  };
+
   const handleOpenDialog = async (invoice?: Invoice) => {
     if (invoice) {
       setEditingInvoice(invoice);
+      // Find client ID if invoice has client_id
+      const clientId = invoice.clientId || '';
       setFormData({
         companyId: invoice.companyId,
+        selectedClientId: clientId,
         clientName: invoice.clientName,
         clientEmail: invoice.clientEmail,
         clientNumber: invoice.clientNumber || '',
         clientCountry: invoice.clientCountry || '',
         invoiceNumber: invoice.invoiceNumber,
         dueDate: invoice.dueDate || '',
-        tax: invoice.tax?.toString() || '0',
+        // Calculate tax percentage from stored tax amount and subtotal
+        taxPercentage: invoice.subtotal > 0 && invoice.tax 
+          ? ((invoice.tax / invoice.subtotal) * 100).toFixed(2) 
+          : '0',
         currency: invoice.currency || currency,
         items: invoice.items.map((item) => ({
           description: item.description,
@@ -199,24 +240,34 @@ const InvoicesScreen: React.FC = () => {
         createClientAccount: false,
         clientPassword: '',
       });
+      // Fetch clients for the company
+      if (invoice.companyId) {
+        await fetchClients(invoice.companyId);
+      }
     } else {
       setEditingInvoice(null);
       const invoiceNumber = await invoiceService.generateInvoiceNumber();
+      const defaultCompanyId = user?.companyId || (companies.length > 0 ? companies[0].id : '');
       setFormData({
-        companyId: user?.companyId || '',
+        companyId: defaultCompanyId,
+        selectedClientId: '',
         clientName: '',
         clientEmail: '',
         clientNumber: '',
         clientCountry: '',
         invoiceNumber,
         dueDate: '',
-        tax: '0',
+        taxPercentage: '0',
         currency: currency,
         items: [],
         signature: '',
         createClientAccount: false,
         clientPassword: '',
       });
+      // Fetch clients for the default company
+      if (defaultCompanyId) {
+        await fetchClients(defaultCompanyId);
+      }
     }
     setDialogOpen(true);
   };
@@ -226,13 +277,14 @@ const InvoicesScreen: React.FC = () => {
     setEditingInvoice(null);
     setFormData({
       companyId: user?.companyId || '',
+      selectedClientId: '',
       clientName: '',
       clientEmail: '',
       clientNumber: '',
       clientCountry: '',
       invoiceNumber: '',
       dueDate: '',
-      tax: '0',
+        taxPercentage: '0',
       currency: currency,
       items: [],
       signature: '',
@@ -277,9 +329,10 @@ const InvoicesScreen: React.FC = () => {
 
   const calculateTotals = () => {
     const subtotal = formData.items.reduce((sum, item) => sum + item.total, 0);
-    const tax = parseFloat(formData.tax) || 0;
+    const taxPercentage = parseFloat(formData.taxPercentage) || 0;
+    const tax = subtotal * (taxPercentage / 100); // Calculate tax amount from percentage
     const total = subtotal + tax;
-    return { subtotal, tax, total };
+    return { subtotal, tax, total, taxPercentage };
   };
   
   // Get the currency symbol for the form based on selected currency
@@ -297,7 +350,7 @@ const InvoicesScreen: React.FC = () => {
         return;
       }
 
-      const { subtotal, tax, total } = calculateTotals();
+      const { subtotal, tax, total, taxPercentage } = calculateTotals();
 
       // Validate client password if creating account and password is provided
       if (formData.createClientAccount && formData.clientPassword && formData.clientPassword.trim().length > 0) {
@@ -328,7 +381,7 @@ const InvoicesScreen: React.FC = () => {
         await invoiceService.updateInvoice(updateData);
         setSuccess(t('invoices.invoiceUpdated'));
       } else {
-        const createData: CreateInvoiceData = {
+        const createData: CreateInvoiceData & { clientId?: string } = {
           companyId: formData.companyId,
           createdBy: user.id,
           clientName: formData.clientName,
@@ -342,6 +395,7 @@ const InvoicesScreen: React.FC = () => {
           total,
           dueDate: formData.dueDate || undefined,
           currency: formData.currency as Currency,
+          clientId: formData.selectedClientId || undefined, // Pass selected client ID if available
         };
         const createdInvoice = await invoiceService.createInvoice(createData);
         
@@ -356,7 +410,7 @@ const InvoicesScreen: React.FC = () => {
         setSuccess(t('invoices.invoiceCreated'));
         setTimeout(() => setSuccess(null), 3000);
         
-        // Process signature update and email sending in background (non-blocking)
+        // Process signature update, client creation, and email sending in background (non-blocking)
         // This doesn't block the UI - user can continue working
         (async () => {
           try {
@@ -462,7 +516,12 @@ const InvoicesScreen: React.FC = () => {
               }
             }
             
-            // Automatically send invoice email to client in background
+            // ALWAYS send invoice email if client email is provided and valid
+            // This ensures PDFs are sent to email inbox automatically
+            const hasValidEmail = formData.clientEmail && 
+                                 formData.clientEmail.trim() !== '' && 
+                                 validateEmail(formData.clientEmail.trim());
+            
             const selectedCompany = companies.find(c => c.id === formData.companyId);
             
             // Use signature from formData if available (more reliable than finalInvoice.signature)
@@ -476,52 +535,91 @@ const InvoicesScreen: React.FC = () => {
             const invoiceCurrency = finalInvoice.currency || formData.currency || currency;
             const invoiceCurrencySymbol = getCurrencySymbol(invoiceCurrency as Currency);
             
-            await emailService.sendInvoiceEmail({
-              clientEmail: formData.clientEmail,
-              clientName: formData.clientName,
-              clientNumber: formData.clientNumber,
-              clientCountry: formData.clientCountry,
-              invoiceNumber: finalInvoice.invoiceNumber,
-              total: finalInvoice.total,
-              subtotal: finalInvoice.subtotal,
-              tax: finalInvoice.tax,
-              dueDate: finalInvoice.dueDate,
-              items: finalInvoice.items,
-              companyLogo: selectedCompany?.logo,
-              companyName: selectedCompany?.name,
-              companyAddress: selectedCompany?.address,
-              companyPhone: selectedCompany?.phone,
-              companyEmail: selectedCompany?.email,
-              signature: signatureToUse,
-              signedBy: signedByToUse,
-              currencySymbol: invoiceCurrencySymbol,
-              currencyCode: invoiceCurrency, // Pass currency code for PDF
-              createdAt: finalInvoice.createdAt,
-              status: finalInvoice.status,
-            });
-            
-            // Update invoice status to 'sent'
-            await invoiceService.updateInvoiceStatus({
-              id: createdInvoice.id,
-              status: 'sent',
-            });
-            
-            // Refresh invoice list again to show updated status
-            await fetchInvoices();
-            
-            // Store the invoice ID for download
-            setRecentlySentInvoice(finalInvoice.id);
-            
-            // Update success message
-            setSuccess(`Invoice created and sent successfully to ${formData.clientEmail}!`);
-            setTimeout(() => {
-              setSuccess(null);
-              setRecentlySentInvoice(null);
-            }, 10000);
-          } catch (emailError: any) {
-            console.error('Error sending invoice email:', emailError);
-            // Don't fail the invoice creation if email fails
-            setError(`Invoice created successfully, but failed to send email: ${emailError.message}`);
+            if (hasValidEmail) {
+              // ALWAYS send email with PDF attachment when invoice is created with email
+              try {
+                console.log('📧 Sending invoice email with PDF to:', formData.clientEmail.trim());
+                
+                const emailResult = await emailService.sendInvoiceEmail({
+                  clientEmail: formData.clientEmail.trim(),
+                  clientName: formData.clientName,
+                  clientNumber: formData.clientNumber,
+                  clientCountry: formData.clientCountry,
+                  invoiceNumber: finalInvoice.invoiceNumber,
+                  total: finalInvoice.total,
+                  subtotal: finalInvoice.subtotal,
+                  tax: finalInvoice.tax,
+                  dueDate: finalInvoice.dueDate,
+                  items: finalInvoice.items,
+                  companyLogo: selectedCompany?.logo,
+                  companyName: selectedCompany?.name,
+                  companyAddress: selectedCompany?.address,
+                  companyPhone: selectedCompany?.phone,
+                  companyEmail: selectedCompany?.email,
+                  companyWebsite: selectedCompany?.website,
+                  companyTaxId: selectedCompany?.taxId,
+                  signature: signatureToUse, // Include signature in email if available
+                  signedBy: signedByToUse,
+                  currencySymbol: invoiceCurrencySymbol,
+                  currencyCode: invoiceCurrency,
+                  createdAt: finalInvoice.createdAt,
+                  status: finalInvoice.status,
+                });
+                
+                if (emailResult.success) {
+                  console.log('✅ Invoice email with PDF sent successfully to:', formData.clientEmail);
+                  
+                  // Update invoice status to 'sent'
+                  await invoiceService.updateInvoiceStatus({
+                    id: createdInvoice.id,
+                    status: 'sent',
+                  });
+                  
+                  // Refresh invoice list again to show updated status
+                  await fetchInvoices();
+                  
+                  // Store the invoice ID for download
+                  setRecentlySentInvoice(finalInvoice.id);
+                  
+                  // Update success message
+                  setSuccess(`✅ Invoice created and sent to ${formData.clientEmail.trim()} with PDF attachment!`);
+                  setTimeout(() => {
+                    setSuccess(null);
+                    setRecentlySentInvoice(null);
+                  }, 10000);
+                } else {
+                  console.error('❌ Failed to send invoice email:', emailResult.message);
+                  setError(`Invoice created successfully, but failed to send email: ${emailResult.message}. PDF is available for download.`);
+                  setTimeout(() => setError(null), 8000);
+                  // Still allow PDF download
+                  setRecentlySentInvoice(finalInvoice.id);
+                }
+              } catch (emailError: any) {
+                console.error('❌ Error sending invoice email:', emailError);
+                // Show error but don't fail - invoice was created successfully, PDF still available
+                setError(`Invoice created successfully, but failed to send email: ${emailError.message}. PDF is available for download.`);
+                setTimeout(() => setError(null), 8000);
+                // Still allow PDF download
+                setRecentlySentInvoice(finalInvoice.id);
+              }
+            } else {
+              // No email provided - only PDF download available
+              console.log('ℹ️ No email provided, invoice created for PDF download only');
+              
+              // Store the invoice ID for download
+              setRecentlySentInvoice(finalInvoice.id);
+              
+              // Update success message
+              setSuccess(`Invoice created successfully! PDF is ready for download.`);
+              setTimeout(() => {
+                setSuccess(null);
+                setRecentlySentInvoice(null);
+              }, 5000);
+            }
+          } catch (bgError: any) {
+            console.error('❌ Background task error:', bgError);
+            // Don't fail the invoice creation if background tasks fail
+            setError(`Invoice created successfully, but some background tasks failed: ${bgError.message}`);
             setTimeout(() => setError(null), 5000);
           }
         })();
@@ -641,6 +739,21 @@ const InvoicesScreen: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      setSuccess(null);
+
+      // Check if client has valid email
+      const hasValidEmail = invoice.clientEmail && 
+                           invoice.clientEmail.trim() !== '' && 
+                           validateEmail(invoice.clientEmail.trim());
+      
+      if (!hasValidEmail) {
+        setError('❌ Client email is missing or invalid. Cannot send email. Please add a valid email address or download PDF instead.');
+        setLoading(false);
+        setTimeout(() => setError(null), 5000);
+        return;
+      }
+
+      console.log('📧 Preparing to send invoice email to:', invoice.clientEmail);
 
       // Get company details if company is selected
       const selectedCompany = companies.find(c => c.id === invoice.companyId);
@@ -654,8 +767,16 @@ const InvoicesScreen: React.FC = () => {
       const balanceDue = invoice.total - paidAmount;
       const status = invoice.status === 'paid' ? 'Paid' : invoice.status === 'sent' ? 'Due' : 'Due';
       
+      // Use provided signature or invoice signature
+      const signatureToUse = signature || invoice.signature;
+      const signedByToUse = signature 
+        ? (user?.role === 'admin' ? 'Supervisor' : (user ? `${user.firstName} ${user.lastName}` : ''))
+        : invoice.signedBy || '';
+      
+      console.log('📧 Sending invoice email with signature:', !!signatureToUse, 'signedBy:', signedByToUse);
+      
       const result = await emailService.sendInvoiceEmail({
-        clientEmail: invoice.clientEmail,
+        clientEmail: invoice.clientEmail.trim(),
         clientName: invoice.clientName,
         clientNumber: invoice.clientNumber,
         clientCountry: invoice.clientCountry,
@@ -674,12 +795,10 @@ const InvoicesScreen: React.FC = () => {
         companyAddress: selectedCompany?.address,
         companyPhone: selectedCompany?.phone,
         companyEmail: selectedCompany?.email,
-        companyWebsite: undefined, // Add website to company type if needed
-        companyTaxId: undefined, // Add taxId to company type if needed
-        signature: signature || invoice.signature,
-        signedBy: signature 
-          ? (user?.role === 'admin' ? 'Supervisor' : (user ? `${user.firstName} ${user.lastName}` : undefined))
-          : invoice.signedBy,
+        companyWebsite: selectedCompany?.website,
+        companyTaxId: selectedCompany?.taxId,
+        signature: signatureToUse, // Include signature in email and PDF
+        signedBy: signedByToUse,
         currencySymbol: invoiceCurrencySymbol,
         currencyCode: invoiceCurrency, // Pass currency code for PDF
         createdAt: invoice.createdAt,
@@ -687,6 +806,8 @@ const InvoicesScreen: React.FC = () => {
       });
 
       if (result.success) {
+        console.log('✅ Invoice email sent successfully!');
+        
         // Update invoice with signature if provided
         if (signature) {
           // If admin signs, show "Supervisor" instead of their name
@@ -710,14 +831,29 @@ const InvoicesScreen: React.FC = () => {
             updatedBy: user?.id,
           });
         }
-        setSuccess(result.message);
-        setTimeout(() => setSuccess(null), 3000);
+        
+        setSuccess(`✅ Invoice sent successfully to ${invoice.clientEmail}! The client will receive the invoice with PDF attachment.`);
+        setTimeout(() => setSuccess(null), 5000);
         await fetchInvoices();
       } else {
-        setError(result.message);
+        console.error('❌ Failed to send invoice email:', result.message);
+        setError(`❌ Failed to send email: ${result.message}. Please check if the email server is running.`);
+        setTimeout(() => setError(null), 8000);
       }
     } catch (err: any) {
-      setError(err.message || t('invoices.failedToSend'));
+      console.error('❌ Error sending invoice email:', err);
+      const errorMessage = err.message || t('invoices.failedToSend');
+      
+      // Provide helpful error messages
+      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('network')) {
+        setError('❌ Cannot connect to email server. Please make sure the email server is running:\n\nRun: cd backend && node email-server.js\n\nOr check VITE_EMAIL_SERVER_URL in your .env file.');
+      } else if (errorMessage.includes('email server')) {
+        setError(`❌ ${errorMessage}\n\nMake sure the email server is running on port 3001.`);
+      } else {
+        setError(`❌ Failed to send invoice email: ${errorMessage}`);
+      }
+      
+      setTimeout(() => setError(null), 8000);
     } finally {
       setLoading(false);
     }
@@ -737,6 +873,18 @@ const InvoicesScreen: React.FC = () => {
       setError(null);
       setSuccess(null);
 
+      // Check if client has valid email
+      const hasValidEmail = invoice.clientEmail && 
+                           invoice.clientEmail.trim() !== '' && 
+                           validateEmail(invoice.clientEmail.trim());
+      
+      if (!hasValidEmail) {
+        setError('Client email is missing or invalid. Cannot send email. Please download PDF instead.');
+        setLoading(false);
+        setResendDialog({ open: false, invoice: null });
+        return;
+      }
+
       // Get company details
       const selectedCompany = companies.find(c => c.id === invoice.companyId);
       
@@ -749,9 +897,9 @@ const InvoicesScreen: React.FC = () => {
       const balanceDue = invoice.total - paidAmount;
       const isOverdue = invoice.dueDate && new Date(invoice.dueDate) < new Date();
       
-      // Send reminder email with PDF
+      // Send reminder email with PDF (include signature)
       const result = await emailService.sendInvoiceEmail({
-        clientEmail: invoice.clientEmail,
+        clientEmail: invoice.clientEmail.trim(),
         clientName: invoice.clientName,
         clientNumber: invoice.clientNumber,
         clientCountry: invoice.clientCountry,
@@ -768,7 +916,9 @@ const InvoicesScreen: React.FC = () => {
         companyAddress: selectedCompany?.address,
         companyPhone: selectedCompany?.phone,
         companyEmail: selectedCompany?.email,
-        signature: invoice.signature,
+        companyWebsite: selectedCompany?.website,
+        companyTaxId: selectedCompany?.taxId,
+        signature: invoice.signature, // Include signature in email and PDF
         signedBy: invoice.signedBy,
         currencySymbol: invoiceCurrencySymbol,
         currencyCode: invoiceCurrency, // Pass currency code for PDF
@@ -868,6 +1018,8 @@ const InvoicesScreen: React.FC = () => {
         companyAddress: company?.address,
         companyPhone: company?.phone,
         companyEmail: company?.email,
+        companyWebsite: company?.website,
+        companyTaxId: company?.taxId,
         companyLogo: company?.logo,
         signature: invoice.signature,
         signedBy: invoice.signedBy,
@@ -877,19 +1029,18 @@ const InvoicesScreen: React.FC = () => {
         status: invoice.status,
       };
 
-      const pdfBase64 = await invoicePDFService.generateInvoicePDFBase64(pdfData);
-      
-      // Convert base64 to blob and download
+      // Generate PDF - try blob first, fallback to base64 if needed
+      let pdfBlob: Blob;
       try {
-        const byteCharacters = atob(pdfBase64);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'application/pdf' });
+        pdfBlob = await invoicePDFService.generateInvoicePDF(pdfData);
         
-        const url = window.URL.createObjectURL(blob);
+        // Validate blob
+        if (!pdfBlob || pdfBlob.size === 0) {
+          throw new Error('Generated PDF is empty');
+        }
+        
+        // Download the blob directly
+        const url = window.URL.createObjectURL(pdfBlob);
         const link = document.createElement('a');
         link.href = url;
         link.download = `Invoice_${invoice.invoiceNumber}.pdf`;
@@ -900,9 +1051,42 @@ const InvoicesScreen: React.FC = () => {
         
         setSuccess('Invoice PDF downloaded successfully!');
         setTimeout(() => setSuccess(null), 3000);
-      } catch (decodeError: any) {
-        console.error('Error decoding PDF:', decodeError);
-        throw new Error('Failed to process PDF data');
+      } catch (pdfError: any) {
+        console.error('Error generating/downloading PDF:', pdfError);
+        
+        // Fallback: Try base64 method if blob fails
+        try {
+          console.log('Attempting fallback to base64 method...');
+          const pdfBase64 = await invoicePDFService.generateInvoicePDFBase64(pdfData);
+          
+          if (!pdfBase64 || pdfBase64.trim() === '') {
+            throw new Error('Generated PDF base64 is empty');
+          }
+          
+          // Convert base64 to blob
+          const byteCharacters = atob(pdfBase64);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'application/pdf' });
+          
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `Invoice_${invoice.invoiceNumber}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          
+          setSuccess('Invoice PDF downloaded successfully!');
+          setTimeout(() => setSuccess(null), 3000);
+        } catch (fallbackError: any) {
+          console.error('Fallback method also failed:', fallbackError);
+          throw new Error(`Failed to generate PDF: ${pdfError.message || 'Unknown error'}`);
+        }
       }
     } catch (err: any) {
       console.error('Error downloading invoice:', err);
@@ -948,7 +1132,7 @@ const InvoicesScreen: React.FC = () => {
     }
   };
 
-  const { subtotal, tax, total } = calculateTotals();
+  const { subtotal, tax, total, taxPercentage } = calculateTotals();
 
   // Calculate summary stats
   const summary = {
@@ -1530,24 +1714,54 @@ const InvoicesScreen: React.FC = () => {
                                   </IconButton>
                                 </>
                               )}
-                              {(invoice.status === 'approved' || invoice.status === 'draft') && (
-                                <IconButton
-                                  size="small"
-                                  color="info"
-                                  onClick={() => handleOpenSignatureDialog(invoice)}
-                                  disabled={loading}
-                                  sx={{
-                                    border: '1px solid rgba(0,0,0,0.08)',
-                                    '&:hover': {
-                                      backgroundColor: 'info.main',
-                                      color: 'white',
-                                      borderColor: 'info.main',
-                                    },
-                                  }}
-                                  title="Send Invoice"
-                                >
-                                  <Email fontSize="small" />
-                                </IconButton>
+                              {(invoice.status === 'approved' || invoice.status === 'draft' || invoice.status === 'sent') && (
+                                <>
+                                  {invoice.clientEmail && validateEmail(invoice.clientEmail.trim()) ? (
+                                    <IconButton
+                                      size="small"
+                                      color="info"
+                                      onClick={() => {
+                                        // If invoice has signature, send directly; otherwise open signature dialog
+                                        if (invoice.signature) {
+                                          handleSendEmail(invoice);
+                                        } else {
+                                          handleOpenSignatureDialog(invoice);
+                                        }
+                                      }}
+                                      disabled={loading}
+                                      sx={{
+                                        border: '1px solid rgba(0,0,0,0.08)',
+                                        '&:hover': {
+                                          backgroundColor: 'info.main',
+                                          color: 'white',
+                                          borderColor: 'info.main',
+                                        },
+                                      }}
+                                      title={invoice.signature ? "Send Invoice Email" : "Add Signature & Send Invoice"}
+                                    >
+                                      <Email fontSize="small" />
+                                    </IconButton>
+                                  ) : (
+                                    <IconButton
+                                      size="small"
+                                      color="info"
+                                      onClick={() => handleOpenSignatureDialog(invoice)}
+                                      disabled={loading}
+                                      sx={{
+                                        border: '1px solid rgba(0,0,0,0.08)',
+                                        opacity: 0.5,
+                                        '&:hover': {
+                                          backgroundColor: 'info.main',
+                                          color: 'white',
+                                          borderColor: 'info.main',
+                                        },
+                                      }}
+                                      title="Add email to send invoice"
+                                    >
+                                      <Email fontSize="small" />
+                                    </IconButton>
+                                  )}
+                                </>
                               )}
                               {(invoice.status === 'sent' || invoice.status === 'pending') && (
                                 <>
@@ -1708,7 +1922,24 @@ const InvoicesScreen: React.FC = () => {
                   <Select
                     value={formData.companyId}
                     label={t('invoices.filterByCompany')}
-                    onChange={(e) => setFormData({ ...formData, companyId: e.target.value })}
+                    onChange={(e) => {
+                      const newCompanyId = e.target.value;
+                      setFormData({ 
+                        ...formData, 
+                        companyId: newCompanyId,
+                        selectedClientId: '', // Clear selected client when company changes
+                        clientName: '',
+                        clientEmail: '',
+                        clientNumber: '',
+                        clientCountry: '',
+                      });
+                      // Fetch clients for the new company
+                      if (newCompanyId) {
+                        fetchClients(newCompanyId);
+                      } else {
+                        setClients([]);
+                      }
+                    }}
                     disabled={!!editingInvoice || (!isAdmin && !!user?.companyId)}
                   >
                     {companies.map((company) => (
@@ -1741,6 +1972,72 @@ const InvoicesScreen: React.FC = () => {
                   )}
                 </FormControl>
               </Grid>
+              <Grid item xs={12}>
+                <FormControl fullWidth required>
+                  <InputLabel>Select Client</InputLabel>
+                  <Select
+                    value={formData.selectedClientId}
+                    label="Select Client"
+                    onChange={(e) => {
+                      const clientId = e.target.value;
+                      if (clientId === '') {
+                        // New client - clear fields
+                        setFormData({ 
+                          ...formData, 
+                          selectedClientId: '',
+                          clientName: '',
+                          clientEmail: '',
+                          clientNumber: '',
+                          clientCountry: '',
+                        });
+                      } else {
+                        // Existing client - auto-fill
+                        const selectedClient = clients.find(c => c.id === clientId);
+                        if (selectedClient) {
+                          setFormData({ 
+                            ...formData, 
+                            selectedClientId: clientId,
+                            clientName: selectedClient.name,
+                            clientEmail: selectedClient.email,
+                            clientNumber: selectedClient.phone || '',
+                            clientCountry: selectedClient.address || '',
+                          });
+                        }
+                      }
+                    }}
+                    disabled={loadingClients || !formData.companyId}
+                  >
+                    <MenuItem value="">
+                      <em>+ New Client (Enter Email Manually)</em>
+                    </MenuItem>
+                    {clients.map((client) => (
+                      <MenuItem key={client.id} value={client.id}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Person sx={{ fontSize: 18, color: 'text.secondary' }} />
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              {client.name}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {client.email}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {loadingClients && (
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                      Loading clients...
+                    </Typography>
+                  )}
+                  {!formData.companyId && (
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                      Please select a company first
+                    </Typography>
+                  )}
+                </FormControl>
+              </Grid>
               <Grid item xs={12} md={6}>
                 <TextField
                   label={t('invoices.clientName')}
@@ -1748,16 +2045,107 @@ const InvoicesScreen: React.FC = () => {
                   required
                   value={formData.clientName}
                   onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
+                  disabled={formData.selectedClientId !== ''} // Disable if client is selected
+                  helperText={formData.selectedClientId !== '' ? 'Client name from selected client' : 'Enter client name'}
                 />
               </Grid>
               <Grid item xs={12} md={6}>
-                <TextField
-                  label={t('invoices.clientEmail')}
-                  type="email"
-                  fullWidth
-                  required
-                  value={formData.clientEmail}
-                  onChange={(e) => setFormData({ ...formData, clientEmail: e.target.value })}
+                <Autocomplete
+                  freeSolo
+                  options={clients}
+                  getOptionLabel={(option) => {
+                    if (typeof option === 'string') return option;
+                    return option.email || '';
+                  }}
+                  value={
+                    formData.selectedClientId && clients.length > 0
+                      ? (clients.find(c => c.id === formData.selectedClientId) || formData.clientEmail)
+                      : formData.clientEmail
+                  }
+                  inputValue={formData.clientEmail}
+                  onInputChange={(event, newValue, reason) => {
+                    // Update email field when user types
+                    if (reason === 'input') {
+                      setFormData({ ...formData, clientEmail: newValue, selectedClientId: '' });
+                    }
+                  }}
+                  onChange={(event, newValue) => {
+                    if (newValue && typeof newValue !== 'string') {
+                      // Client selected from dropdown
+                      setFormData({ 
+                        ...formData, 
+                        selectedClientId: newValue.id,
+                        clientName: newValue.name,
+                        clientEmail: newValue.email,
+                        clientNumber: newValue.phone || '',
+                        clientCountry: newValue.address || '',
+                      });
+                    } else if (typeof newValue === 'string') {
+                      // Manual email entry or cleared
+                      setFormData({ ...formData, clientEmail: newValue, selectedClientId: '' });
+                    } else if (newValue === null) {
+                      // Cleared
+                      setFormData({ ...formData, clientEmail: '', selectedClientId: '', clientName: '' });
+                    }
+                  }}
+                  filterOptions={(options, params) => {
+                    const filtered = options.filter((option) => {
+                      const email = option.email?.toLowerCase() || '';
+                      const name = option.name?.toLowerCase() || '';
+                      const search = params.inputValue.toLowerCase();
+                      return email.includes(search) || name.includes(search);
+                    });
+                    return filtered;
+                  }}
+                  renderOption={(props, option) => (
+                    <Box component="li" {...props} key={option.id}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                        <Email sx={{ fontSize: 18, color: 'text.secondary' }} />
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {option.name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {option.email}
+                          </Typography>
+                        </Box>
+                        <Chip 
+                          label="Existing" 
+                          size="small" 
+                          color="success" 
+                          sx={{ fontSize: '0.7rem', height: 20 }}
+                        />
+                      </Box>
+                    </Box>
+                  )}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label={t('invoices.clientEmail') + ' (Optional)'}
+                      type="email"
+                      disabled={formData.selectedClientId !== '' || loadingClients || !formData.companyId}
+                      helperText={
+                        formData.selectedClientId !== '' 
+                          ? 'Client email from selected client' 
+                          : formData.companyId 
+                            ? 'Enter email to send invoice via email, or leave empty for PDF download only' 
+                            : 'Please select a company first'
+                      }
+                      InputProps={{
+                        ...params.InputProps,
+                        startAdornment: (
+                          <>
+                            <InputAdornment position="start">
+                              <Email color="action" />
+                            </InputAdornment>
+                            {params.InputProps.startAdornment}
+                          </>
+                        ),
+                      }}
+                    />
+                  )}
+                  loading={loadingClients}
+                  noOptionsText={formData.companyId ? "No existing clients found. Enter new email." : "Select a company first"}
                 />
               </Grid>
               <Grid item xs={12} md={6}>
@@ -1935,18 +2323,39 @@ const InvoicesScreen: React.FC = () => {
                     <TableRow>
                       <TableCell colSpan={3} align="right">
                         <TextField
-                          label={t('invoices.tax')}
+                          label="Tax %"
                           type="number"
                           size="small"
                           sx={{ width: 120 }}
-                          value={formData.tax}
-                          onChange={(e) => setFormData({ ...formData, tax: e.target.value })}
+                          value={formData.taxPercentage}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Allow empty, 0, or positive numbers up to 100
+                            if (value === '' || (!isNaN(parseFloat(value)) && parseFloat(value) >= 0 && parseFloat(value) <= 100)) {
+                              setFormData({ ...formData, taxPercentage: value });
+                            }
+                          }}
                           InputProps={{
-                            startAdornment: <Typography sx={{ mr: 1 }}>{getFormCurrencySymbol()}</Typography>,
+                            endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>,
+                          }}
+                          inputProps={{
+                            min: 0,
+                            max: 100,
+                            step: 0.01,
                           }}
                         />
                       </TableCell>
-                      <TableCell align="right">{formatCurrency(tax, undefined, true)}</TableCell>
+                      <TableCell align="right">
+                        {formatCurrency(tax, undefined, true)}
+                        {(() => {
+                          const { taxPercentage: calcTaxPercentage } = calculateTotals();
+                          return calcTaxPercentage > 0 && (
+                            <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', fontSize: '0.75rem' }}>
+                              ({calcTaxPercentage.toFixed(2)}%)
+                            </Typography>
+                          );
+                        })()}
+                      </TableCell>
                       <TableCell />
                     </TableRow>
                     <TableRow>
@@ -1984,7 +2393,7 @@ const InvoicesScreen: React.FC = () => {
                     id: `temp-${idx}`,
                   })),
                   subtotal: calculateTotals().subtotal,
-                  tax: parseFloat(formData.tax) || 0,
+                  tax: calculateTotals().tax, // Tax amount calculated from percentage
                   total: calculateTotals().total,
                   status: 'draft',
                   createdAt: new Date().toISOString(),
@@ -2122,6 +2531,11 @@ const InvoicesScreen: React.FC = () => {
                         <TableRow>
                           <TableCell colSpan={3} align="right">
                             {t('invoices.tax')}:
+                            {viewDialog.invoice.subtotal > 0 && (
+                              <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', fontSize: '0.75rem', fontWeight: 'normal' }}>
+                                ({((viewDialog.invoice.tax / viewDialog.invoice.subtotal) * 100).toFixed(2)}%)
+                              </Typography>
+                            )}
                           </TableCell>
                           <TableCell align="right">{formatCurrency(viewDialog.invoice.tax)}</TableCell>
                         </TableRow>

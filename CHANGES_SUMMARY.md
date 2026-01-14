@@ -1,126 +1,455 @@
-# Changes Summary - PDF Layout & Direct Email Sending
+# Changes Summary - Production Deployment
 
-## Changes Made
+This document lists all changes made for production deployment. Copy these changes to your live system.
 
-### 1. Fixed PDF Layout and Currency Formatting
+## 📋 Files Modified
 
-**File**: `src/services/invoice-pdf.service.ts`
+### 1. Invoice PDF Service - Fixed "From" Section & Added VAT Description
+**File:** `src/services/invoice-pdf.service.ts`
 
-- **Fixed currency symbol encoding**: Ensured proper font encoding for currency symbols to prevent malformed characters (like "b .b©", "p.p©")
-- **Improved table layout**: Description is properly contained within the table with proper padding and alignment
-- **Enhanced currency formatting**: Added explicit font setting before rendering currency values to ensure proper character encoding
-- **Set language encoding**: Added `doc.setLanguage('en-US')` to ensure proper character rendering
+#### Change 1: Fixed "From" Section Formatting (Lines ~318-350)
+**OLD CODE:**
+```typescript
+doc.setFont('helvetica', 'normal');
+if (data.companyAddress) {
+  doc.text(data.companyAddress, rightColumnX, fromContentY);
+  fromContentY += 5;
+}
+if (data.companyEmail) {
+  doc.text(data.companyEmail, rightColumnX, fromContentY);
+}
+```
 
-**Changes**:
-- Added proper font encoding before rendering currency values
-- Ensured descriptions are properly formatted within table cells
-- Fixed currency symbol display issues
+**NEW CODE:**
+```typescript
+doc.setFont('helvetica', 'normal');
+doc.setFontSize(9);
 
-### 2. Removed 3rd Party Email Dependency (EmailJS)
+// Address with label
+if (data.companyAddress) {
+  doc.text(`Address: ${data.companyAddress}`, rightColumnX, fromContentY);
+  fromContentY += 5;
+}
 
-**File**: `src/services/email.service.ts`
+// Phone with label
+if (data.companyPhone) {
+  doc.text(`Phone: ${data.companyPhone}`, rightColumnX, fromContentY);
+  fromContentY += 5;
+}
 
-- **Removed EmailJS**: Completely removed all EmailJS dependencies and fallback code
-- **Direct email sending**: Now uses only Supabase Edge Functions for email delivery
-- **Simplified code**: Removed ~150 lines of EmailJS fallback code
-- **Better error handling**: Improved error messages for Edge Function failures
+// Email with label
+if (data.companyEmail) {
+  doc.text(`Email: ${data.companyEmail}`, rightColumnX, fromContentY);
+  fromContentY += 5;
+}
 
-**Changes**:
-- Removed `sendEmailViaEmailJS()` method entirely
-- Updated `sendEmailWithAttachment()` to only use Supabase Edge Functions
-- Updated service comments to reflect direct email sending
+// Website with label
+if (data.companyWebsite) {
+  doc.text(`Website: ${data.companyWebsite}`, rightColumnX, fromContentY);
+  fromContentY += 5;
+}
 
-### 3. Created Supabase Edge Function for Email Sending
+// Tax ID/VAT with label
+if (data.companyTaxId) {
+  doc.text(`VAT/Tax ID: ${data.companyTaxId}`, rightColumnX, fromContentY);
+  fromContentY += 5;
+}
+```
 
-**New Files**:
-- `supabase/functions/send-email/index.ts` - Main Edge Function for email sending
-- `supabase/functions/_shared/cors.ts` - CORS headers helper
+#### Change 2: Added VAT Description in Tax Section (Lines ~493-510)
+**OLD CODE:**
+```typescript
+// Tax row (if tax exists)
+if (data.tax && data.tax > 0) {
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...colors.black);
+  // Tax label aligned to right edge of Price column
+  doc.text('Tax:', separatorX.price - 10, yPosition, { align: 'right' });
+  const taxText = formatCurrency(data.tax);
+  doc.setFont('helvetica', 'normal');
+  // Tax amount aligned to right edge
+  doc.text(taxText, pageWidth - margin - 8, yPosition, { align: 'right' });
+  yPosition += 8;
+}
+```
 
-**Features**:
-- Supports **Resend API** (recommended - free tier available)
-- Supports **SendGrid API** (alternative option)
-- Handles PDF attachments via base64 encoding
-- Proper error handling and validation
-- CORS support for web clients
+**NEW CODE:**
+```typescript
+// Tax row (if tax exists)
+if (data.tax && data.tax > 0) {
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...colors.black);
+  // Tax label aligned to right edge of Price column
+  doc.text('Tax:', separatorX.price - 10, yPosition, { align: 'right' });
+  const taxText = formatCurrency(data.tax);
+  doc.setFont('helvetica', 'normal');
+  // Tax amount aligned to right edge
+  doc.text(taxText, pageWidth - margin - 8, yPosition, { align: 'right' });
+  yPosition += 5;
+  
+  // VAT Description (if tax ID exists)
+  if (data.companyTaxId) {
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(...colors.gray);
+    const vatDescription = `VAT Registration: ${data.companyTaxId}`;
+    // Right align VAT description
+    doc.text(vatDescription, pageWidth - margin - 8, yPosition, { align: 'right' });
+    yPosition += 6;
+  } else {
+    yPosition += 3;
+  }
+}
+```
 
-### 4. Created Setup Documentation
+---
 
-**New File**: `EMAIL_SETUP.md`
+### 2. Staff Service - Fixed Email URL
+**File:** `src/services/staff.service.ts`
 
-Complete guide for:
-- Setting up Resend (recommended)
-- Setting up SendGrid (alternative)
-- Deploying Edge Functions
-- Configuring environment variables
-- Troubleshooting common issues
+#### Change: Use Production URL for Email Links (Line ~815)
+**OLD CODE:**
+```typescript
+const loginUrl = window.location.origin + '/login';
+```
 
-## Migration Guide
+**NEW CODE:**
+```typescript
+// Use environment variable for production URL, fallback to current origin for development
+const appUrl = import.meta.env.VITE_APP_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+const loginUrl = `${appUrl}/login`;
+```
 
-### For Existing Users
+---
 
-1. **Deploy the Edge Function**:
-   ```bash
-   supabase functions deploy send-email
-   ```
+### 3. Client Service - Fixed Email URL
+**File:** `src/services/client.service.ts`
 
-2. **Configure Email Provider** (choose one):
-   
-   **Option A - Resend (Recommended)**:
-   - Sign up at https://resend.com
-   - Get API key
-   - Set in Supabase Dashboard > Edge Functions > Secrets:
-     ```
-     EMAIL_PROVIDER=resend
-     RESEND_API_KEY=re_your_key_here
-     EMAIL_FROM=noreply@yourdomain.com
-     EMAIL_FROM_NAME=UBS ERP System
-     ```
+#### Change: Use Production URL for Email Links (Line ~491)
+**OLD CODE:**
+```typescript
+const loginUrl = window.location.origin + '/login';
+```
 
-   **Option B - SendGrid**:
-   - Sign up at https://sendgrid.com
-   - Get API key
-   - Set in Supabase Dashboard > Edge Functions > Secrets:
-     ```
-     EMAIL_PROVIDER=smtp
-     SENDGRID_API_KEY=SG.your_key_here
-     EMAIL_FROM=noreply@yourdomain.com
-     EMAIL_FROM_NAME=UBS ERP System
-     ```
+**NEW CODE:**
+```typescript
+// Use environment variable for production URL, fallback to current origin for development
+const appUrl = import.meta.env.VITE_APP_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+const loginUrl = `${appUrl}/login`;
+```
 
-3. **Remove EmailJS Dependencies** (if installed):
-   ```bash
-   npm uninstall @emailjs/browser
-   ```
+---
 
-4. **Remove EmailJS Environment Variables** (if any):
-   - Remove `VITE_EMAILJS_SERVICE_ID`
-   - Remove `VITE_EMAILJS_TEMPLATE_ID`
-   - Remove `VITE_EMAILJS_PUBLIC_KEY`
+### 4. Auth Service - Fixed Password Reset URL
+**File:** `src/services/auth.service.ts`
 
-## Benefits
+#### Change: Use Production URL for Password Reset (Lines ~595-596)
+**OLD CODE:**
+```typescript
+await supabase.auth.resetPasswordForEmail(email, {
+  redirectTo: `${window.location.origin}/reset-password`,
+});
+```
 
-1. **No 3rd Party Dependencies**: Direct email sending from your system
-2. **Better Security**: API keys stored securely in Supabase Secrets
-3. **Improved PDF Quality**: Fixed currency symbol encoding issues
-4. **Better Layout**: Proper table formatting with descriptions contained within cells
-5. **More Reliable**: Professional email services (Resend/SendGrid) vs client-side EmailJS
-6. **Better Deliverability**: Server-side email sending improves inbox delivery rates
+**NEW CODE:**
+```typescript
+// Get app URL for reset password links (use environment variable in production)
+const appUrl = import.meta.env.VITE_APP_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
 
-## Testing
+// ... later in code ...
+await supabase.auth.resetPasswordForEmail(email, {
+  redirectTo: `${appUrl}/reset-password`,
+});
 
-After setup:
-1. Create an invoice in the system
-2. Click "Send Invoice"
-3. Verify email is received with PDF attachment
-4. Check PDF formatting - currency symbols should display correctly
-5. Verify table layout - descriptions should be properly contained
+// ... and in email template ...
+const resetUrl = `${appUrl}/reset-password`;
+```
 
-## Support
+**Note:** Replace ALL instances of `window.location.origin` in the `resetPassword` function with `appUrl`.
 
-If you encounter issues:
-1. Check Edge Function logs: `supabase functions logs send-email`
-2. Verify environment variables in Supabase Dashboard
-3. Check email provider dashboard for delivery status
-4. Review `EMAIL_SETUP.md` for detailed troubleshooting
+---
 
+### 5. Company Types - Added Website and Tax ID
+**File:** `src/types/index.ts`
 
+#### Change: Added Fields to Company Interface (Lines ~32-33)
+**OLD CODE:**
+```typescript
+export interface Company {
+  id: string;
+  name: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  logo?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+**NEW CODE:**
+```typescript
+export interface Company {
+  id: string;
+  name: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  logo?: string;
+  website?: string;
+  taxId?: string; // VAT/Tax Identification Number
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+---
+
+### 6. Company Service - Added Website and Tax ID Support
+**File:** `src/services/company.service.ts`
+
+#### Change 1: Updated Interfaces (Lines ~4-25)
+**OLD CODE:**
+```typescript
+export interface CreateCompanyData {
+  name: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  logo?: string;
+  isActive?: boolean;
+}
+
+export interface UpdateCompanyData {
+  id: string;
+  name?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  logo?: string;
+  isActive?: boolean;
+}
+```
+
+**NEW CODE:**
+```typescript
+export interface CreateCompanyData {
+  name: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  logo?: string;
+  website?: string;
+  taxId?: string;
+  isActive?: boolean;
+}
+
+export interface UpdateCompanyData {
+  id: string;
+  name?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  logo?: string;
+  website?: string;
+  taxId?: string;
+  isActive?: boolean;
+}
+```
+
+#### Change 2: Updated createCompany Method (Line ~94-101)
+**OLD CODE:**
+```typescript
+.insert({
+  name: data.name,
+  address: data.address,
+  phone: data.phone,
+  email: data.email,
+  logo: data.logo,
+  is_active: data.isActive !== undefined ? data.isActive : true,
+})
+```
+
+**NEW CODE:**
+```typescript
+.insert({
+  name: data.name,
+  address: data.address,
+  phone: data.phone,
+  email: data.email,
+  logo: data.logo,
+  website: data.website,
+  tax_id: data.taxId,
+  is_active: data.isActive !== undefined ? data.isActive : true,
+})
+```
+
+#### Change 3: Updated updateCompany Method (Line ~121-130)
+**OLD CODE:**
+```typescript
+const updateData: any = {};
+if (data.name !== undefined) updateData.name = data.name;
+if (data.address !== undefined) updateData.address = data.address;
+if (data.phone !== undefined) updateData.phone = data.phone;
+if (data.email !== undefined) updateData.email = data.email;
+if (data.logo !== undefined) {
+  updateData.logo = data.logo && data.logo.trim() !== '' ? data.logo : null;
+}
+if (data.isActive !== undefined) updateData.is_active = data.isActive;
+```
+
+**NEW CODE:**
+```typescript
+const updateData: any = {};
+if (data.name !== undefined) updateData.name = data.name;
+if (data.address !== undefined) updateData.address = data.address;
+if (data.phone !== undefined) updateData.phone = data.phone;
+if (data.email !== undefined) updateData.email = data.email;
+if (data.logo !== undefined) {
+  updateData.logo = data.logo && data.logo.trim() !== '' ? data.logo : null;
+}
+if (data.website !== undefined) updateData.website = data.website;
+if (data.taxId !== undefined) updateData.tax_id = data.taxId;
+if (data.isActive !== undefined) updateData.is_active = data.isActive;
+```
+
+#### Change 4: Updated Mapping Functions (All return statements)
+**OLD CODE:**
+```typescript
+return {
+  id: company.id,
+  name: company.name,
+  address: company.address,
+  phone: company.phone,
+  email: company.email,
+  logo: company.logo,
+  isActive: company.is_active,
+  createdAt: company.created_at,
+  updatedAt: company.updated_at,
+};
+```
+
+**NEW CODE:**
+```typescript
+return {
+  id: company.id,
+  name: company.name,
+  address: company.address,
+  phone: company.phone,
+  email: company.email,
+  logo: company.logo,
+  website: company.website,
+  taxId: company.tax_id || company.taxId,
+  isActive: company.is_active,
+  createdAt: company.created_at,
+  updatedAt: company.updated_at,
+};
+```
+
+**Note:** Apply this change to:
+- `createCompany` method (line ~107-117)
+- `updateCompany` method (line ~142-152)
+- `getCompany` method (line ~170-180)
+- `getAllCompanies` method (line ~191-201)
+
+---
+
+### 7. Invoice Screen - Pass Website and Tax ID
+**File:** `src/screens/invoices/InvoicesScreen.tsx`
+
+#### Change: Add website and taxId to all invoice email calls
+Find all instances where you pass company data to `sendInvoiceEmail` and add:
+```typescript
+companyWebsite: selectedCompany?.website,
+companyTaxId: selectedCompany?.taxId,
+```
+
+**Locations to update:**
+1. Around line ~490-495 (when creating new invoice)
+2. Around line ~676-678 (when sending existing invoice)
+3. Around line ~770-771 (when resending invoice)
+4. Around line ~870-871 (when downloading invoice PDF)
+
+**Example:**
+```typescript
+companyLogo: selectedCompany?.logo,
+companyName: selectedCompany?.name,
+companyAddress: selectedCompany?.address,
+companyPhone: selectedCompany?.phone,
+companyEmail: selectedCompany?.email,
+companyWebsite: selectedCompany?.website,  // ADD THIS
+companyTaxId: selectedCompany?.taxId,      // ADD THIS
+```
+
+---
+
+### 8. Environment Configuration
+**File:** `.env` or `env-template.txt`
+
+#### Add Production URL
+Add this line to your `.env` file:
+```env
+VITE_APP_URL=https://ubscrm.com
+```
+
+**Complete .env example:**
+```env
+VITE_SUPABASE_URL=https://shejpknspmrlgbjhhptx.supabase.co
+VITE_SUPABASE_ANON_KEY=your_anon_key_here
+VITE_OPENAI_API_KEY=
+
+# App URL (for email links in registration/welcome emails)
+VITE_APP_URL=https://ubscrm.com
+
+# EmailJS Configuration (if using)
+VITE_EMAILJS_SERVICE_ID=your_service_id
+VITE_EMAILJS_TEMPLATE_ID=your_template_id
+VITE_EMAILJS_PUBLIC_KEY=your_public_key
+```
+
+---
+
+## 🗄️ Database Changes (Optional)
+
+If you want to store website and tax ID in the database, run this SQL:
+
+```sql
+ALTER TABLE companies 
+ADD COLUMN IF NOT EXISTS website VARCHAR(255),
+ADD COLUMN IF NOT EXISTS tax_id VARCHAR(100);
+```
+
+**Note:** The code will work without these columns (they'll just be undefined), but adding them allows you to store and retrieve this data.
+
+---
+
+## ✅ Checklist for Deployment
+
+- [ ] Copy all code changes to production files
+- [ ] Add `VITE_APP_URL=https://ubscrm.com` to production `.env` file
+- [ ] Run database migration (if adding website/tax_id columns)
+- [ ] Rebuild the application: `npm run build`
+- [ ] Test email links in registration emails
+- [ ] Test invoice PDF generation with "From" section
+- [ ] Verify VAT description appears on invoices with tax
+
+---
+
+## 📝 Notes
+
+1. **Environment Variable:** The `VITE_APP_URL` is used for all email links. If not set, it falls back to the current origin (works for development).
+
+2. **Database Columns:** The website and tax_id columns are optional. The code handles their absence gracefully.
+
+3. **Invoice PDF:** The "From" section now shows properly labeled fields, and VAT description appears when tax ID is available.
+
+4. **Email Links:** All registration, welcome, and password reset emails now use the production URL when `VITE_APP_URL` is set.
+
+---
+
+**Last Updated:** Today
+**Production URL:** https://ubscrm.com

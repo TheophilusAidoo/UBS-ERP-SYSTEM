@@ -26,16 +26,17 @@ const ThemedApp = () => {
     }
   }, [user?.id, initializeLanguage]);
 
-  // Initialize global settings on app start (from Supabase)
+  // Initialize global settings on app start (from Supabase) - with caching for instant load
   useEffect(() => {
     initializeSettings();
   }, [initializeSettings]);
   
   // Reload global settings periodically to catch admin changes
+  // Increased to 5 minutes since we now use caching (settings load instantly from cache)
   useEffect(() => {
     const interval = setInterval(() => {
       initializeSettings();
-    }, 3000); // Check every 3 seconds
+    }, 5 * 60 * 1000); // Check every 5 minutes (settings are cached for instant load)
     
     return () => clearInterval(interval);
   }, [initializeSettings]);

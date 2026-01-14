@@ -316,12 +316,36 @@ class InvoicePDFService {
     }
 
     doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    
+    // Address with label
     if (data.companyAddress) {
-      doc.text(data.companyAddress, rightColumnX, fromContentY);
+      doc.text(`Address: ${data.companyAddress}`, rightColumnX, fromContentY);
       fromContentY += 5;
     }
+    
+    // Phone with label
+    if (data.companyPhone) {
+      doc.text(`Phone: ${data.companyPhone}`, rightColumnX, fromContentY);
+      fromContentY += 5;
+    }
+    
+    // Email with label
     if (data.companyEmail) {
-      doc.text(data.companyEmail, rightColumnX, fromContentY);
+      doc.text(`Email: ${data.companyEmail}`, rightColumnX, fromContentY);
+      fromContentY += 5;
+    }
+    
+    // Website with label
+    if (data.companyWebsite) {
+      doc.text(`Website: ${data.companyWebsite}`, rightColumnX, fromContentY);
+      fromContentY += 5;
+    }
+    
+    // Tax ID/VAT with label
+    if (data.companyTaxId) {
+      doc.text(`VAT/Tax ID: ${data.companyTaxId}`, rightColumnX, fromContentY);
+      fromContentY += 5;
     }
 
     yPosition = Math.max(yPosition, fromContentY) + 6;
@@ -485,23 +509,55 @@ class InvoicePDFService {
     doc.setLineWidth(0.5);
     doc.line(margin, yPosition, pageWidth - margin, yPosition);
 
-    // ========== TAX AND TOTAL SECTION ==========
+    // ========== SUBTOTAL, TAX AND TOTAL SECTION ==========
     yPosition += 8;
     const totalStartX = margin + colWidths.item + colWidths.quantity;
     const totalWidth = colWidths.price + colWidths.amount;
 
-    // Tax row (if tax exists)
+    // Subtotal row
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...colors.black);
+    doc.text('Subtotal:', separatorX.price - 10, yPosition, { align: 'right' });
+    const subtotalText = formatCurrency(data.subtotal);
+    doc.text(subtotalText, pageWidth - margin - 8, yPosition, { align: 'right' });
+    yPosition += 6;
+
+    // VAT/Tax row (if tax exists)
     if (data.tax && data.tax > 0) {
+      // Calculate tax percentage from tax amount and subtotal
+      const taxPercentage = data.subtotal > 0 ? ((data.tax / data.subtotal) * 100).toFixed(2) : '0';
+      
       doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('helvetica', 'bold');
       doc.setTextColor(...colors.black);
-      // Tax label aligned to right edge of Price column
-      doc.text('Tax:', separatorX.price - 10, yPosition, { align: 'right' });
+      // VAT label with percentage (e.g., "VAT (10%):")
+      const vatLabel = `VAT (${taxPercentage}%):`;
+      doc.text(vatLabel, separatorX.price - 10, yPosition, { align: 'right' });
       const taxText = formatCurrency(data.tax);
-      doc.setFont('helvetica', 'normal');
-      // Tax amount aligned to right edge
+      doc.setFont('helvetica', 'bold');
+      // VAT amount aligned to right edge
       doc.text(taxText, pageWidth - margin - 8, yPosition, { align: 'right' });
-      yPosition += 8;
+      yPosition += 5;
+      
+      // VAT Description (if tax ID exists)
+      if (data.companyTaxId) {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(...colors.gray);
+        const vatDescription = `VAT Registration: ${data.companyTaxId} (${taxPercentage}% VAT Applied)`;
+        // Right align VAT description
+        doc.text(vatDescription, pageWidth - margin - 8, yPosition, { align: 'right' });
+        yPosition += 6;
+      } else {
+        // Show percentage even without tax ID
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(...colors.gray);
+        const percentageInfo = `${taxPercentage}% VAT Applied`;
+        doc.text(percentageInfo, pageWidth - margin - 8, yPosition, { align: 'right' });
+        yPosition += 6;
+      }
     }
 
     // Total - "Total" label in Price column, amount in Amount column

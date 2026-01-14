@@ -117,12 +117,12 @@ const SettingsScreen: React.FC = () => {
   
   // Email settings state - cPanel SMTP only
   const [emailSettings, setEmailSettings] = useState({
-    smtpHost: '',
-    smtpPort: '587',
-    smtpUser: '',
-    smtpPassword: '',
-    smtpSecure: 'false', // 'true' for SSL (465), 'false' for TLS (587)
-    emailFrom: '',
+    smtpHost: 'mail.ubscrm.com', // Pre-fill with correct values
+    smtpPort: '465', // Default to 465 for SSL
+    smtpUser: 'info@ubscrm.com', // Pre-fill with correct values
+    smtpPassword: '', // Don't pre-fill password for security
+    smtpSecure: 'true', // 'true' for SSL (465), 'false' for TLS (587)
+    emailFrom: 'info@ubscrm.com', // Pre-fill with correct values
     emailFromName: 'UBS ERP System',
   });
   const [emailSettingsLoading, setEmailSettingsLoading] = useState(false);
@@ -151,46 +151,88 @@ const SettingsScreen: React.FC = () => {
   const loadEmailSettings = async () => {
     try {
       const settings = await globalSettingsService.getAllSettings();
+      console.log('📧 Loading email settings from Supabase:', {
+        host: settings.email_smtp_host,
+        port: settings.email_smtp_port,
+        user: settings.email_smtp_user,
+        hasPassword: !!settings.email_smtp_password,
+        secure: settings.email_smtp_secure,
+        from: settings.email_from,
+      });
+      
       setEmailSettings({
-        smtpHost: settings.email_smtp_host || '',
-        smtpPort: settings.email_smtp_port || '587',
-        smtpUser: settings.email_smtp_user || '',
-        smtpPassword: settings.email_smtp_password || '',
-        smtpSecure: settings.email_smtp_secure || 'false',
-        emailFrom: settings.email_from || '',
+        smtpHost: settings.email_smtp_host || 'mail.ubscrm.com',
+        smtpPort: settings.email_smtp_port || '465',
+        smtpUser: settings.email_smtp_user || 'info@ubscrm.com',
+        smtpPassword: settings.email_smtp_password || '', // Load saved password (empty if not set)
+        smtpSecure: settings.email_smtp_secure || 'true',
+        emailFrom: settings.email_from || 'info@ubscrm.com',
         emailFromName: settings.email_from_name || 'UBS ERP System',
       });
     } catch (error) {
       console.error('Error loading email settings:', error);
+      // Keep defaults if loading fails
     }
   };
 
   const handleSaveEmailSettings = async () => {
     // Validate required fields
-    if (!emailSettings.smtpHost || !emailSettings.smtpUser || !emailSettings.smtpPassword || !emailSettings.emailFrom) {
-      setError('Please fill in all required fields: SMTP Host, SMTP Username, SMTP Password, and From Email');
+    if (!emailSettings.smtpHost || !emailSettings.smtpUser || !emailSettings.emailFrom) {
+      setError('Please fill in all required fields: SMTP Host, SMTP Username, and From Email');
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
+
+    // Password is optional if already saved (user might not want to change it)
+    // But we need at least one password (either existing or new)
+    const currentSettings = await globalSettingsService.getAllSettings();
+    const hasExistingPassword = !!currentSettings.email_smtp_password;
+    const hasNewPassword = !!emailSettings.smtpPassword && emailSettings.smtpPassword.trim() !== '';
+    
+    if (!hasExistingPassword && !hasNewPassword) {
+      setError('Please enter SMTP Password');
       setTimeout(() => setError(null), 5000);
       return;
     }
 
     setEmailSettingsLoading(true);
     try {
-      await globalSettingsService.setSettings({
+      const settingsToSave: any = {
         email_provider: 'smtp', // Always SMTP for cPanel
-        email_smtp_host: emailSettings.smtpHost,
-        email_smtp_port: emailSettings.smtpPort,
-        email_smtp_user: emailSettings.smtpUser,
-        email_smtp_password: emailSettings.smtpPassword,
+        email_smtp_host: emailSettings.smtpHost.trim(),
+        email_smtp_port: emailSettings.smtpPort.trim(),
+        email_smtp_user: emailSettings.smtpUser.trim(),
         email_smtp_secure: emailSettings.smtpSecure,
-        email_from: emailSettings.emailFrom,
-        email_from_name: emailSettings.emailFromName,
+        email_from: emailSettings.emailFrom.trim(),
+        email_from_name: emailSettings.emailFromName.trim(),
+      };
+      
+      // Only update password if a new one is provided
+      if (hasNewPassword) {
+        settingsToSave.email_smtp_password = emailSettings.smtpPassword.trim();
+      }
+      
+      console.log('💾 Saving email settings to Supabase:', {
+        host: settingsToSave.email_smtp_host,
+        port: settingsToSave.email_smtp_port,
+        user: settingsToSave.email_smtp_user,
+        hasPassword: !!settingsToSave.email_smtp_password,
+        secure: settingsToSave.email_smtp_secure,
+        from: settingsToSave.email_from,
       });
-      setSuccess('cPanel SMTP settings saved successfully!');
-      setTimeout(() => setSuccess(null), 3000);
+      
+      await globalSettingsService.setSettings(settingsToSave);
+      
+      // Reload settings from database to show updated values
+      await loadEmailSettings();
+      
+      setSuccess('✅ cPanel SMTP settings saved successfully! You can now send test emails.');
+      setTimeout(() => setSuccess(null), 5000);
     } catch (error: any) {
       setSuccess(null);
-      setError(error.message || 'Failed to save email settings');
-      setTimeout(() => setError(null), 5000);
+      console.error('❌ Error saving email settings:', error);
+      setError(error.message || 'Failed to save email settings. Please try again.');
+      setTimeout(() => setError(null), 8000);
     } finally {
       setEmailSettingsLoading(false);
     }
@@ -211,29 +253,142 @@ const SettingsScreen: React.FC = () => {
     }
     
     // Validate SMTP settings are filled
-    if (!emailSettings.smtpHost || !emailSettings.smtpUser || !emailSettings.smtpPassword) {
-      setError('Please fill in all SMTP settings (Host, Username, Password) before testing');
+    if (!emailSettings.smtpHost || !emailSettings.smtpUser) {
+      setError('Please fill in SMTP Host and SMTP Username before testing');
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
+    
+    // Check if password is available (either from form or from saved settings)
+    let passwordToUse = emailSettings.smtpPassword;
+    if (!passwordToUse || passwordToUse.trim() === '') {
+      // Try to load from saved settings
+      try {
+        const savedSettings = await globalSettingsService.getAllSettings();
+        passwordToUse = savedSettings.email_smtp_password || '';
+      } catch (e) {
+        console.warn('Could not load saved password:', e);
+      }
+    }
+    
+    if (!passwordToUse || passwordToUse.trim() === '') {
+      setError('Please enter SMTP Password. If you already saved it, enter it again to test.');
       setTimeout(() => setError(null), 5000);
       return;
     }
     
     setEmailTestLoading(true);
     setError(null);
+    let timeoutId: NodeJS.Timeout | null = null;
     try {
-      // Direct API call to email server (no Supabase)
+      // Direct API call to email server with SMTP settings from form
+      // Email server runs on port 3001 (separate from frontend on 3003)
       const emailServerUrl = import.meta.env.VITE_EMAIL_SERVER_URL || 'http://localhost:3001';
+      
+      // First, check if email server is running (quick check, don't wait long)
+      console.log('🔍 Checking if email server is running at:', emailServerUrl);
+      let healthTimeoutId: NodeJS.Timeout | null = null;
+      try {
+        const healthController = new AbortController();
+        healthTimeoutId = setTimeout(() => healthController.abort(), 3000); // 3 second timeout
+        
+        const healthCheck = await fetch(`${emailServerUrl}/health`, {
+          method: 'GET',
+          signal: healthController.signal,
+        });
+        
+        if (healthTimeoutId) {
+          clearTimeout(healthTimeoutId);
+          healthTimeoutId = null;
+        }
+        
+        if (!healthCheck.ok) {
+          throw new Error(`Email server returned error: ${healthCheck.status}`);
+        }
+        const healthData = await healthCheck.json();
+        console.log('✅ Email server is running:', healthData);
+      } catch (healthError: any) {
+        if (healthTimeoutId) {
+          clearTimeout(healthTimeoutId);
+          healthTimeoutId = null;
+        }
+        
+        if (healthError.name === 'AbortError' || healthError.message?.includes('timeout') || healthError.message?.includes('Failed to fetch') || healthError.message?.includes('NetworkError') || healthError.message?.includes('ECONNREFUSED')) {
+          throw new Error(`❌ Cannot connect to email server at ${emailServerUrl}\n\n📋 The email server is not running. Please start it:\n\n1. Open a NEW terminal window\n2. Navigate to: cd "/Users/alphamac/Downloads/UBS ERP /backend"\n3. Run: npm start\n4. Wait for "Email server running" message\n5. Keep that terminal open\n6. Then try sending test email again\n\n💡 Or use: ./start-email-server.sh\n\n⚠️  The email server must stay running in a separate terminal!`);
+        }
+        // If health check fails but it's not a timeout, continue anyway (server might be slow to respond)
+        console.warn('⚠️ Health check failed, but continuing:', healthError.message);
+      }
+      
+      const smtpConfigToSend = {
+        host: emailSettings.smtpHost.trim(),
+        port: emailSettings.smtpPort.trim(),
+        user: emailSettings.smtpUser.trim(),
+        password: passwordToUse.trim(),
+        secure: emailSettings.smtpSecure === 'true',
+        fromEmail: emailSettings.emailFrom.trim(),
+        fromName: emailSettings.emailFromName.trim(),
+      };
+      
+      console.log('📧 Sending test email with SMTP config:', {
+        host: smtpConfigToSend.host,
+        port: smtpConfigToSend.port,
+        user: smtpConfigToSend.user,
+        hasPassword: !!smtpConfigToSend.password,
+        secure: smtpConfigToSend.secure,
+        fromEmail: smtpConfigToSend.fromEmail,
+        to: testEmailTo.trim(),
+      });
+      
+      // Add timeout to fetch request to prevent hanging
+      // Increased timeout to 30 seconds to allow for SMTP server response time
+      const controller = new AbortController();
+      timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 30000); // 30 second timeout for test email (allows time for SMTP connection)
       
       const response = await fetch(`${emailServerUrl}/send-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        signal: controller.signal,
         body: JSON.stringify({
           to: testEmailTo.trim(),
           subject: 'Test Email from UBS ERP',
-          html: '<h1>Test Email</h1><p>This is a test email from your UBS ERP system. If you received this, your cPanel email configuration is working correctly!</p><p><strong>Sent to:</strong> ' + testEmailTo.trim() + '</p>',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h1 style="color: #2563eb;">✅ Test Email Successful!</h1>
+              <p>This is a test email from your UBS ERP system.</p>
+              <p>If you received this email, your cPanel SMTP configuration is working correctly!</p>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+              <p style="color: #6b7280; font-size: 0.9em;">
+                <strong>Sent to:</strong> ${testEmailTo.trim()}<br>
+                <strong>From:</strong> ${emailSettings.emailFrom}<br>
+                <strong>SMTP Host:</strong> ${emailSettings.smtpHost}<br>
+                <strong>SMTP Port:</strong> ${emailSettings.smtpPort}<br>
+                <strong>Connection:</strong> ${emailSettings.smtpSecure === 'true' ? 'SSL' : 'TLS'}
+              </p>
+            </div>
+          `,
+          // Send SMTP settings from the form so email server uses them
+          smtpConfig: smtpConfigToSend,
         }),
       });
+
+      // Clear timeout on response
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText || `Server error: ${response.status}` };
+        }
+        throw new Error(errorData.error || `Server error: ${response.status}`);
+      }
 
       const result = await response.json();
 
@@ -242,20 +397,44 @@ const SettingsScreen: React.FC = () => {
       }
       
       if (result.success === true) {
-        setSuccess('Test email sent successfully! Please check your inbox.');
-        setTimeout(() => setSuccess(null), 5000);
+        setSuccess('✅ Test email sent successfully! Please check your inbox (and spam folder).');
+        setTimeout(() => setSuccess(null), 8000);
         return;
       }
 
-      throw new Error('No response from email service');
-
-      setSuccess('Test email sent successfully! Please check your inbox.');
-      setTimeout(() => setSuccess(null), 5000);
+      throw new Error('Unexpected response from email service');
     } catch (error: any) {
-      console.error('Test email error:', error);
-      const errorMessage = error.message || 'Failed to send test email. Please check your cPanel SMTP configuration.';
-      setError(errorMessage);
-      setTimeout(() => setError(null), 8000);
+      // Clear timeout on error
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      
+      console.error('❌ Test email error:', error);
+      let errorMessage = error.message || 'Failed to send test email.';
+      
+      // Provide helpful error messages
+      if (error.name === 'AbortError' || errorMessage.includes('timeout') || errorMessage.includes('aborted')) {
+        errorMessage = `Email request timed out (30s). The SMTP server may be slow or unreachable.\n\nPlease verify:\n` +
+          `1. Email server is running: Check terminal where you ran "npm start" in backend folder\n` +
+          `2. SMTP Host: ${emailSettings.smtpHost} (should be mail.ubscrm.com)\n` +
+          `3. SMTP Port: ${emailSettings.smtpPort} (should be 465)\n` +
+          `4. Connection Security: ${emailSettings.smtpSecure === 'true' ? 'SSL' : 'TLS'}\n` +
+          `5. Username: ${emailSettings.smtpUser} (should be info@ubscrm.com)\n` +
+          `6. Password: Check if correct (Aidoo@1998)\n` +
+          `7. Network: Check if firewall allows outbound connections on port 465`;
+      } else if (errorMessage.includes('ECONNREFUSED')) {
+        errorMessage = 'Cannot connect to email server. Please make sure the email server is running: cd backend && npm start';
+      } else if (errorMessage.includes('authentication') || errorMessage.includes('535') || errorMessage.includes('Invalid login')) {
+        errorMessage = 'SMTP authentication failed. Please check your username (info@ubscrm.com) and password (Aidoo@1998) are correct.';
+      } else if (errorMessage.includes('connection') || errorMessage.includes('EHLO') || errorMessage.includes('ENOTFOUND')) {
+        errorMessage = 'SMTP connection failed. Please check your SMTP Host (mail.ubscrm.com) and Port (465) are correct.';
+      } else if (errorMessage.includes('ETIMEDOUT')) {
+        errorMessage = 'SMTP server connection timed out. Please check your network connection and SMTP server settings.';
+      }
+      
+      setError(`❌ ${errorMessage}`);
+      setTimeout(() => setError(null), 10000);
     } finally {
       setEmailTestLoading(false);
     }
@@ -1119,9 +1298,17 @@ const SettingsScreen: React.FC = () => {
                         fullWidth
                         label="SMTP Port *"
                         value={emailSettings.smtpPort}
-                        onChange={(e) => setEmailSettings({ ...emailSettings, smtpPort: e.target.value })}
-                        placeholder="587"
-                        helperText="587 for TLS (recommended), 465 for SSL"
+                        onChange={(e) => {
+                          const port = e.target.value;
+                          setEmailSettings({ 
+                            ...emailSettings, 
+                            smtpPort: port,
+                            // Auto-update connection security based on port
+                            smtpSecure: port === '465' ? 'true' : port === '587' ? 'false' : emailSettings.smtpSecure
+                          });
+                        }}
+                        placeholder="465"
+                        helperText="465 for SSL (recommended), 587 for TLS"
                         type="number"
                         required
                       />
@@ -1144,9 +1331,9 @@ const SettingsScreen: React.FC = () => {
                         type={showSmtpPassword ? 'text' : 'password'}
                         value={emailSettings.smtpPassword}
                         onChange={(e) => setEmailSettings({ ...emailSettings, smtpPassword: e.target.value })}
-                        placeholder="Your email password"
-                        helperText="Password for the cPanel email account"
-                        required
+                        placeholder="Enter password to update (leave empty to keep existing)"
+                        helperText="Password for the cPanel email account. Leave empty if password is already saved."
+                        required={false}
                         InputProps={{
                           endAdornment: (
                             <InputAdornment position="end">
@@ -1168,15 +1355,23 @@ const SettingsScreen: React.FC = () => {
                         <Select
                           value={emailSettings.smtpSecure}
                           label="Connection Security *"
-                          onChange={(e) => setEmailSettings({ ...emailSettings, smtpSecure: e.target.value })}
+                          onChange={(e) => {
+                            const secure = e.target.value;
+                            setEmailSettings({ 
+                              ...emailSettings, 
+                              smtpSecure: secure,
+                              // Auto-update port based on connection security
+                              smtpPort: secure === 'true' ? '465' : '587'
+                            });
+                          }}
                           sx={{ borderRadius: 2 }}
                         >
-                          <MenuItem value="false">TLS (Port 587 - Recommended)</MenuItem>
-                          <MenuItem value="true">SSL (Port 465)</MenuItem>
+                          <MenuItem value="true">SSL (Port 465 - Recommended)</MenuItem>
+                          <MenuItem value="false">TLS (Port 587)</MenuItem>
                         </Select>
                       </FormControl>
                       <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                        TLS is recommended for most cPanel servers. Use SSL if TLS doesn't work.
+                        SSL (Port 465) is recommended for cPanel servers. Use TLS (Port 587) if SSL doesn't work.
                       </Typography>
                     </Grid>
 

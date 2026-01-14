@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 
@@ -23,4 +23,4 @@ const LoadingScreen: React.FC = () => {
   );
 };
 
-export default LoadingScreen;
+export default memo(LoadingScreen);

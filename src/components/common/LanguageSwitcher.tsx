@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback, memo } from 'react';
 import {
   Button,
   Menu,
@@ -23,21 +23,21 @@ const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({ variant = 'outlined
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
 
-  const currentLang = LANGUAGES.find((l) => l.code === currentLanguage);
+  const currentLang = useMemo(() => LANGUAGES.find((l) => l.code === currentLanguage), [currentLanguage]);
 
-  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
-  };
+  }, []);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setAnchorEl(null);
-  };
+  }, []);
 
-  const handleLanguageChange = async (lang: Language) => {
+  const handleLanguageChange = useCallback(async (lang: Language) => {
     // Pass user ID to save language preference per user
     await setLanguage(lang, user?.id);
     handleClose();
-  };
+  }, [setLanguage, user?.id, handleClose]);
 
   return (
     <Box>

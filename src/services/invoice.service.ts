@@ -61,16 +61,39 @@ class InvoiceService {
       throw new Error('Invalid Created By user ID format. Must be a valid UUID.');
     }
     
-    // Check if client exists by email
+    // Check if client exists by email or if clientId is provided in data
+    // Optimized: Only check if clientId is provided, skip email lookup for performance
     let clientId: string | null = null;
-    const { data: existingClient } = await supabase
-      .from(TABLES.clients)
-      .select('id')
-      .eq('email', data.clientEmail)
-      .maybeSingle();
     
-    if (existingClient && existingClient.id && typeof existingClient.id === 'string' && existingClient.id.trim() !== '') {
-      clientId = existingClient.id.trim();
+    // First, check if clientId is provided directly (from selected client dropdown)
+    if ((data as any).clientId && typeof (data as any).clientId === 'string' && (data as any).clientId.trim() !== '') {
+      const providedClientId = (data as any).clientId.trim();
+      // Validate UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (uuidRegex.test(providedClientId)) {
+        // Use provided clientId directly - skip verification query for performance
+        clientId = providedClientId;
+      }
+    }
+    
+    // Only check by email if no clientId was provided (optimization: skip if clientId exists)
+    // This reduces database queries and improves performance
+    if (!clientId && data.clientEmail) {
+      try {
+        const { data: existingClient } = await supabase
+          .from(TABLES.clients)
+          .select('id')
+          .eq('email', data.clientEmail)
+          .limit(1)
+          .maybeSingle();
+        
+        if (existingClient?.id) {
+          clientId = existingClient.id.trim();
+        }
+      } catch (err) {
+        // If client lookup fails, continue without clientId (invoice can still be created)
+        console.warn('⚠️ Client lookup failed, continuing without clientId:', err);
+      }
     }
 
     let invoiceNumber = data.invoiceNumber;
@@ -78,58 +101,141 @@ class InvoiceService {
     const maxRetries = 5;
 
     while (retries < maxRetries) {
-      // Create invoice
-      const { data: invoice, error: invoiceError } = await supabase
-        .from(TABLES.invoices)
-        .insert({
-          company_id: data.companyId.trim(), // Already validated above
-          created_by: data.createdBy.trim(), // Already validated above
-          client_id: (clientId && clientId.trim() !== '') ? clientId.trim() : null,
-          client_name: data.clientName,
-          client_email: data.clientEmail,
-          client_number: (data.clientNumber && data.clientNumber.trim() !== '') ? data.clientNumber.trim() : null,
-          client_country: (data.clientCountry && data.clientCountry.trim() !== '') ? data.clientCountry.trim() : null,
-          invoice_number: invoiceNumber,
-          subtotal: data.subtotal,
-          tax: data.tax || 0,
-          total: data.total,
-          due_date: (data.dueDate && data.dueDate.trim() !== '') ? data.dueDate.trim() : null,
-          currency: (data.currency && data.currency.trim() !== '') ? data.currency.trim() : null,
-          status: 'draft',
-        })
-        .select()
-        .single();
+      try {
+        // Create invoice
+        const { data: invoice, error: invoiceError } = await supabase
+          .from(TABLES.invoices)
+          .insert({
+            company_id: data.companyId.trim(), // Already validated above
+            created_by: data.createdBy.trim(), // Already validated above
+            client_id: (clientId && clientId.trim() !== '') ? clientId.trim() : null,
+            client_name: data.clientName,
+            client_email: data.clientEmail,
+            client_number: (data.clientNumber && data.clientNumber.trim() !== '') ? data.clientNumber.trim() : null,
+            client_country: (data.clientCountry && data.clientCountry.trim() !== '') ? data.clientCountry.trim() : null,
+            invoice_number: invoiceNumber,
+            subtotal: data.subtotal,
+            tax: data.tax || 0,
+            total: data.total,
+            due_date: (data.dueDate && data.dueDate.trim() !== '') ? data.dueDate.trim() : null,
+            currency: (data.currency && data.currency.trim() !== '') ? data.currency.trim() : null,
+            status: 'draft',
+          })
+          .select()
+          .single();
 
-      // If successful, create invoice items and return
-      if (!invoiceError) {
-        // Create invoice items
-        if (data.items && data.items.length > 0) {
-          const itemsToInsert = data.items.map((item) => ({
-            invoice_id: invoice.id,
-            description: item.description,
-            quantity: item.quantity,
-            unit_price: item.unitPrice,
-            total: item.total,
-          }));
+        // If successful, create invoice items and return
+        if (!invoiceError && invoice) {
+          // Create invoice items (only if there are items)
+          if (data.items && data.items.length > 0) {
+            const itemsToInsert = data.items.map((item) => ({
+              invoice_id: invoice.id,
+              description: item.description,
+              quantity: item.quantity,
+              unit_price: item.unitPrice,
+              total: item.total,
+            }));
 
-          const { error: itemsError } = await supabase.from(TABLES.invoice_items).insert(itemsToInsert);
-          if (itemsError) throw itemsError;
+            const { error: itemsError } = await supabase.from(TABLES.invoice_items).insert(itemsToInsert);
+            if (itemsError) {
+              console.error('❌ Error creating invoice items:', itemsError);
+              // Don't fail the invoice creation if items fail - invoice is already created
+              // Return invoice without items
+              return {
+                id: invoice.id,
+                companyId: invoice.company_id,
+                createdBy: invoice.created_by,
+                clientId: invoice.client_id,
+                clientName: invoice.client_name,
+                clientEmail: invoice.client_email,
+                clientNumber: invoice.client_number,
+                clientCountry: invoice.client_country,
+                invoiceNumber: invoice.invoice_number,
+                items: [], // Return empty items array
+                subtotal: Number(invoice.subtotal),
+                tax: invoice.tax ? Number(invoice.tax) : undefined,
+                total: Number(invoice.total),
+                status: invoice.status,
+                dueDate: invoice.due_date,
+                sentAt: invoice.sent_at,
+                paidAt: invoice.paid_at,
+                signature: invoice.signature,
+                signedBy: invoice.signed_by,
+                signedAt: invoice.signed_at,
+                currency: invoice.currency,
+                createdAt: invoice.created_at,
+                updatedAt: invoice.updated_at,
+              } as Invoice;
+            }
+          }
+
+          // Fetch complete invoice with items (optimized - use direct data if available)
+          try {
+            return await this.getInvoice(invoice.id);
+          } catch (fetchError) {
+            // If fetch fails, return the invoice we just created
+            console.warn('⚠️ Error fetching complete invoice, returning created invoice:', fetchError);
+            return {
+              id: invoice.id,
+              companyId: invoice.company_id,
+              createdBy: invoice.created_by,
+              clientId: invoice.client_id,
+              clientName: invoice.client_name,
+              clientEmail: invoice.client_email,
+              clientNumber: invoice.client_number,
+              clientCountry: invoice.client_country,
+              invoiceNumber: invoice.invoice_number,
+              items: data.items || [],
+              subtotal: Number(invoice.subtotal),
+              tax: invoice.tax ? Number(invoice.tax) : undefined,
+              total: Number(invoice.total),
+              status: invoice.status,
+              dueDate: invoice.due_date,
+              sentAt: invoice.sent_at,
+              paidAt: invoice.paid_at,
+              signature: invoice.signature,
+              signedBy: invoice.signed_by,
+              signedAt: invoice.signed_at,
+              currency: invoice.currency,
+              createdAt: invoice.created_at,
+              updatedAt: invoice.updated_at,
+            } as Invoice;
+          }
         }
 
-        // Fetch complete invoice with items
-        return this.getInvoice(invoice.id);
-      }
+        // Handle errors
+        if (invoiceError) {
+          // If it's a duplicate key error, regenerate invoice number and retry
+          if (invoiceError.code === '23505' && invoiceError.message?.includes('invoice_number')) {
+            retries++;
+            // Regenerate invoice number
+            invoiceNumber = await this.generateInvoiceNumber();
+            continue;
+          }
 
-      // If it's a duplicate key error, regenerate invoice number and retry
-      if (invoiceError.code === '23505' && invoiceError.message?.includes('invoice_number')) {
-        retries++;
-        // Regenerate invoice number
-        invoiceNumber = await this.generateInvoiceNumber();
-        continue;
-      }
+          // Handle timeout errors
+          if (invoiceError.message?.includes('timeout') || invoiceError.message?.includes('aborted')) {
+            retries++;
+            if (retries < maxRetries) {
+              console.warn(`⚠️ Invoice creation timeout, retrying (${retries}/${maxRetries})...`);
+              await new Promise(resolve => setTimeout(resolve, 1000 * retries)); // Exponential backoff
+              continue;
+            }
+          }
 
-      // If it's a different error, throw it
-      throw invoiceError;
+          // If it's a different error, throw it
+          throw invoiceError;
+        }
+      } catch (error: any) {
+        // Handle timeout/abort errors with retry
+        if ((error.name === 'TimeoutError' || error.message?.includes('timeout') || error.message?.includes('aborted')) && retries < maxRetries) {
+          retries++;
+          console.warn(`⚠️ Invoice creation error, retrying (${retries}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * retries));
+          continue;
+        }
+        throw error;
+      }
     }
 
     // If we've exhausted retries, throw an error
@@ -265,37 +371,59 @@ class InvoiceService {
     clientId?: string;
     clientEmail?: string;
   }): Promise<Invoice[]> {
-    let query = supabase.from(TABLES.invoices).select().order('created_at', { ascending: false }).limit(500);
+    try {
+      let query = supabase.from(TABLES.invoices).select().order('created_at', { ascending: false }).limit(500);
 
-    if (filters?.companyId) {
-      query = query.eq('company_id', filters.companyId);
-    }
-    if (filters?.createdBy) {
-      query = query.eq('created_by', filters.createdBy);
-    }
-    if (filters?.status) {
-      query = query.eq('status', filters.status);
-    }
-    if (filters?.clientId) {
-      query = query.eq('client_id', filters.clientId);
-    }
-    if (filters?.clientEmail) {
-      query = query.eq('client_email', filters.clientEmail);
-    }
+      if (filters?.companyId) {
+        query = query.eq('company_id', filters.companyId);
+      }
+      if (filters?.createdBy) {
+        query = query.eq('created_by', filters.createdBy);
+      }
+      if (filters?.status) {
+        query = query.eq('status', filters.status);
+      }
+      if (filters?.clientId) {
+        query = query.eq('client_id', filters.clientId);
+      }
+      if (filters?.clientEmail) {
+        query = query.eq('client_email', filters.clientEmail);
+      }
 
-    const { data: invoices, error } = await query;
+      const { data: invoices, error } = await query;
 
-    if (error) throw error;
+      if (error) throw error;
 
-    // Fetch items for each invoice
-    const invoicesWithItems = await Promise.all(
-      (invoices || []).map(async (invoice) => {
-        const { data: items } = await supabase
-          .from(TABLES.invoice_items)
-          .select()
-          .eq('invoice_id', invoice.id)
-          .order('created_at', { ascending: true });
+      if (!invoices || invoices.length === 0) {
+        return [];
+      }
 
+      // Optimized: Fetch all items in a single query instead of per invoice
+      const invoiceIds = invoices.map(inv => inv.id);
+      const { data: allItems, error: itemsError } = await supabase
+        .from(TABLES.invoice_items)
+        .select()
+        .in('invoice_id', invoiceIds)
+        .order('created_at', { ascending: true });
+
+      if (itemsError) {
+        console.warn('⚠️ Error fetching invoice items:', itemsError);
+        // Continue without items rather than failing completely
+      }
+
+      // Group items by invoice_id for faster lookup
+      const itemsByInvoice = new Map<string, any[]>();
+      (allItems || []).forEach((item) => {
+        const invoiceId = item.invoice_id;
+        if (!itemsByInvoice.has(invoiceId)) {
+          itemsByInvoice.set(invoiceId, []);
+        }
+        itemsByInvoice.get(invoiceId)!.push(item);
+      });
+
+      // Map invoices with their items
+      const invoicesWithItems = invoices.map((invoice) => {
+        const items = itemsByInvoice.get(invoice.id) || [];
         return {
           id: invoice.id,
           companyId: invoice.company_id,
@@ -306,7 +434,7 @@ class InvoiceService {
           clientNumber: invoice.client_number,
           clientCountry: invoice.client_country,
           invoiceNumber: invoice.invoice_number,
-          items: (items || []).map((item) => ({
+          items: items.map((item) => ({
             id: item.id,
             description: item.description,
             quantity: Number(item.quantity),
@@ -327,10 +455,18 @@ class InvoiceService {
           createdAt: invoice.created_at,
           updatedAt: invoice.updated_at,
         };
-      })
-    );
+      });
 
-    return invoicesWithItems;
+      return invoicesWithItems;
+    } catch (error: any) {
+      console.error('❌ Error fetching invoices:', error);
+      // Don't throw timeout errors - return empty array instead
+      if (error.name === 'TimeoutError' || error.message?.includes('timed out') || error.message?.includes('aborted')) {
+        console.warn('⚠️ Invoice fetch timed out, returning empty array');
+        return [];
+      }
+      throw error;
+    }
   }
 
   async generateInvoiceNumber(): Promise<string> {

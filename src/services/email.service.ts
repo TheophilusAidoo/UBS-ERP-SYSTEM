@@ -3,6 +3,7 @@
 // Uses direct cPanel SMTP server (no Supabase Edge Functions)
 
 import { invoicePDFService, InvoicePDFData } from './invoice-pdf.service';
+import { globalSettingsService } from './global-settings.service';
 
 export interface EmailData {
   to: string;
@@ -21,7 +22,7 @@ class EmailService {
    * Send invoice email with PDF attachment
    */
   async sendInvoiceEmail(invoiceData: {
-    clientEmail: string;
+    clientEmail: string; // Required - validated before calling this function
     clientName: string;
     clientNumber?: string;
     clientCountry?: string;
@@ -84,8 +85,16 @@ class EmailService {
 
       const pdfBase64 = await invoicePDFService.generateInvoicePDFBase64(pdfData);
 
-      // Generate HTML email content
-      const htmlContent = this.generateInvoiceEmailHTML(invoiceData, invoiceData.currencySymbol || '$');
+      // Generate HTML email content with subtotal and tax
+      // Ensure tax is passed correctly (default to 0 if undefined)
+      const taxValue = invoiceData.tax !== undefined && invoiceData.tax !== null ? invoiceData.tax : 0;
+      console.log('📧 Email HTML - Subtotal:', invoiceData.subtotal, 'Tax:', taxValue, 'Total:', invoiceData.total);
+      
+      const htmlContent = this.generateInvoiceEmailHTML({
+        ...invoiceData,
+        subtotal: invoiceData.subtotal,
+        tax: taxValue,
+      }, invoiceData.currencySymbol || '$');
 
       // Determine email subject based on invoice status
       const isOverdue = invoiceData.dueDate && new Date(invoiceData.dueDate) < new Date();
@@ -138,53 +147,165 @@ class EmailService {
   }
 
   /**
+   * Get SMTP settings from Supabase (admin panel) or use defaults
+   */
+  private async getSmtpConfig(): Promise<any> {
+    try {
+      const settings = await globalSettingsService.getAllSettings();
+      
+      // If SMTP settings exist in Supabase, use them
+      if (settings.email_smtp_host && settings.email_smtp_user && settings.email_smtp_password) {
+        return {
+          host: settings.email_smtp_host,
+          port: settings.email_smtp_port || '465',
+          user: settings.email_smtp_user,
+          password: settings.email_smtp_password,
+          secure: settings.email_smtp_secure === 'true' || settings.email_smtp_port === '465',
+          fromEmail: settings.email_from || settings.email_smtp_user,
+          fromName: settings.email_from_name || 'UBS ERP System',
+        };
+      }
+      
+      // Return null to use server defaults (.env file)
+      return null;
+    } catch (error) {
+      console.warn('⚠️ Failed to load SMTP settings from Supabase, using server defaults:', error);
+      return null;
+    }
+  }
+
+  /**
    * Send email via direct cPanel SMTP server
    * No Supabase Edge Functions - direct API call
    */
   private async sendEmailWithAttachment(emailData: EmailData): Promise<{ success: boolean; message: string }> {
     try {
       // Direct API call to email server
+      // Email server runs on port 3001 (separate from frontend on 3003)
       const emailServerUrl = import.meta.env.VITE_EMAIL_SERVER_URL || 'http://localhost:3001';
       
-      const response = await fetch(`${emailServerUrl}/send-email`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to: emailData.to,
-          subject: emailData.subject,
-          html: emailData.html,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success === true) {
-        return {
-          success: true,
-          message: result.message || 'Email sent successfully',
-        };
+      console.log('📧 Sending email via server:', emailServerUrl);
+      
+      // Get SMTP settings from Supabase (if configured in admin panel)
+      const smtpConfig = await this.getSmtpConfig();
+      
+      // Prepare request body with attachments
+      const requestBody: any = {
+        to: emailData.to,
+        subject: emailData.subject,
+        html: emailData.html,
+      };
+      
+      // Include SMTP config if available (from Supabase admin panel)
+      if (smtpConfig) {
+        requestBody.smtpConfig = smtpConfig;
+        console.log('📧 Using SMTP settings from Supabase (admin panel)');
       } else {
-        return {
-          success: false,
-          message: result.error || 'Failed to send email',
-        };
+        console.log('📧 Using SMTP settings from email server (.env file)');
+      }
+      
+      // Include attachments if provided
+      if (emailData.attachments && emailData.attachments.length > 0) {
+        requestBody.attachments = emailData.attachments.map(att => ({
+          filename: att.filename,
+          content: att.content, // Base64 content
+          contentType: att.contentType,
+          encoding: att.encoding || 'base64',
+        }));
+        console.log(`📎 Including ${emailData.attachments.length} attachment(s)`);
+      }
+      
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      let timeoutId: NodeJS.Timeout | null = null;
+      
+      // Set timeout only if controller hasn't been aborted
+      timeoutId = setTimeout(() => {
+        if (!controller.signal.aborted) {
+          controller.abort();
+        }
+      }, 30000); // 30 second timeout
+      
+      try {
+        const response = await fetch(`${emailServerUrl}/send-email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        });
+
+        // Clear timeout on success
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { error: errorText || 'Failed to send email' };
+          }
+          console.error('❌ Email server error:', errorData);
+          return {
+            success: false,
+            message: errorData.error || `Server error: ${response.status}. Please check email server logs.`,
+          };
+        }
+
+        const result = await response.json();
+        console.log('✅ Email server response:', result);
+
+        if (result.success === true) {
+          return {
+            success: true,
+            message: result.message || `Email sent successfully to ${emailData.to}`,
+          };
+        } else {
+          return {
+            success: false,
+            message: result.error || 'Email server returned an error. Please check server logs.',
+          };
+        }
+      } catch (fetchError: any) {
+        // Clear timeout on error
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        
+        // Don't re-throw abort errors, convert to user-friendly message
+        if (fetchError.name === 'AbortError' || fetchError.message?.includes('aborted')) {
+          throw new Error('Email request timed out. Please check if the email server is running and try again.');
+        }
+        
+        throw fetchError;
       }
     } catch (error: any) {
-      console.error('Email service error:', error);
+      console.error('❌ Email service error:', error);
       const errorMsg = error?.message || 'Failed to send email';
       
-      if (errorMsg.includes('Failed to fetch') || errorMsg.includes('network')) {
+      if (error.name === 'AbortError') {
         return {
           success: false,
-          message: 'Cannot connect to email server. Make sure the email server is running. Run: cd backend && npm start',
+          message: 'Email request timed out. Please check if the email server is running and try again.',
+        };
+      }
+      
+      if (errorMsg.includes('Failed to fetch') || errorMsg.includes('network') || errorMsg.includes('ECONNREFUSED')) {
+        return {
+          success: false,
+          message: `Cannot connect to email server at ${import.meta.env.VITE_EMAIL_SERVER_URL || 'http://localhost:3001'}.\n\nPlease make sure the email server is running:\n1. Open terminal\n2. Run: cd backend && node email-server.js\n3. Wait for "Email server running" message\n4. Try sending the invoice again`,
         };
       }
       
       return {
         success: false,
-        message: errorMsg || 'Failed to send email',
+        message: `Failed to send email: ${errorMsg}`,
       };
     }
   }
@@ -494,11 +615,14 @@ class EmailService {
   private generateInvoiceEmailHTML(invoiceData: {
     clientName: string;
     invoiceNumber: string;
+    subtotal: number;
+    tax?: number;
     total: number;
     dueDate?: string;
     items: Array<{ description: string; quantity: number; unitPrice: number; total: number }>;
     companyLogo?: string;
     companyName?: string;
+    companyTaxId?: string;
     signature?: string;
     signedBy?: string;
   }, currencySymbol: string = '$'): string {
@@ -559,9 +683,58 @@ class EmailService {
                   ${itemsHTML}
                 </tbody>
                 <tfoot>
+                  <tr>
+                    <td colspan="3" style="text-align: right; padding: 12px; border-top: 2px solid #e5e7eb;">
+                      <strong>Subtotal:</strong>
+                    </td>
+                    <td style="text-align: right; padding: 12px; border-top: 2px solid #e5e7eb;">
+                      <strong>${formatCurrency(invoiceData.subtotal)}</strong>
+                    </td>
+                  </tr>
+                  ${(() => {
+                    // Calculate tax if not provided but total differs from subtotal
+                    const calculatedTax = invoiceData.tax !== undefined && invoiceData.tax !== null 
+                      ? invoiceData.tax 
+                      : (invoiceData.total - invoiceData.subtotal);
+                    const hasTax = calculatedTax > 0 || (invoiceData.total !== invoiceData.subtotal);
+                    return hasTax;
+                  })() ? `
+                  <tr>
+                    <td colspan="3" style="text-align: right; padding: 12px;">
+                      <strong>${(() => {
+                        const calculatedTax = invoiceData.tax !== undefined && invoiceData.tax !== null 
+                          ? invoiceData.tax 
+                          : (invoiceData.total - invoiceData.subtotal);
+                        const taxPercentage = invoiceData.subtotal > 0 
+                          ? ((calculatedTax / invoiceData.subtotal) * 100).toFixed(2) 
+                          : '0';
+                        return `VAT (${taxPercentage}%):`;
+                      })()}</strong>
+                    </td>
+                    <td style="text-align: right; padding: 12px;">
+                      <strong>${(() => {
+                        const calculatedTax = invoiceData.tax !== undefined && invoiceData.tax !== null 
+                          ? invoiceData.tax 
+                          : (invoiceData.total - invoiceData.subtotal);
+                        return formatCurrency(calculatedTax);
+                      })()}</strong>
+                    </td>
+                  </tr>
+                  ${invoiceData.companyTaxId ? `
+                  <tr>
+                    <td colspan="4" style="text-align: right; padding: 8px 12px; font-size: 0.85em; color: #6b7280; font-style: italic;">
+                      VAT Registration: ${invoiceData.companyTaxId}
+                    </td>
+                  </tr>
+                  ` : ''}
+                  ` : ''}
                   <tr class="total-row">
-                    <td colspan="3" style="text-align: right; padding: 12px;">Total:</td>
-                    <td style="text-align: right; padding: 12px;">${formatCurrency(invoiceData.total)}</td>
+                    <td colspan="3" style="text-align: right; padding: 12px; border-top: 2px solid #d1d5db;">
+                      <strong>Total:</strong>
+                    </td>
+                    <td style="text-align: right; padding: 12px; border-top: 2px solid #d1d5db;">
+                      <strong>${formatCurrency(invoiceData.total)}</strong>
+                    </td>
                   </tr>
                 </tfoot>
               </table>
@@ -571,8 +744,10 @@ class EmailService {
               ${invoiceData.signature ? `
                 <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e5e7eb;">
                   <p style="margin-bottom: 10px;"><strong>Authorized Signature:</strong></p>
-                  <img src="${invoiceData.signature}" alt="Signature" style="max-width: 300px; max-height: 100px; border: 1px solid #e5e7eb; padding: 10px; background: white;" />
-                  ${invoiceData.signedBy ? `<p style="margin-top: 10px; font-size: 0.9em; color: #6b7280;">Signed by: ${invoiceData.signedBy}</p>` : ''}
+                  <div style="margin-bottom: 10px;">
+                    <img src="${invoiceData.signature}" alt="Signature" style="max-width: 300px; max-height: 100px; border: 1px solid #e5e7eb; padding: 10px; background: white; display: block;" />
+                  </div>
+                  ${invoiceData.signedBy ? `<p style="margin-top: 5px; font-size: 0.9em; color: #6b7280; font-weight: 500;">Signed by: ${invoiceData.signedBy}</p>` : ''}
                 </div>
               ` : ''}
               

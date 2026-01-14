@@ -29,10 +29,18 @@ const LoginScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { login, isAuthenticated, user } = useAuthStore();
-  const { loginBackgroundColor, loginBackgroundImage, loginLogo } = useGlobalSettingsStore();
+  const { loginBackgroundColor, loginBackgroundImage, loginLogo, sidebarLogo } = useGlobalSettingsStore();
+  const [backgroundImageError, setBackgroundImageError] = useState(false);
+  const [logoError, setLogoError] = useState(false);
+  
+  // Use sidebar logo as fallback for login logo
+  const effectiveLoginLogo = loginLogo || sidebarLogo || (logoError ? null : '/ubs-logo.png');
+  
+  // Use default background image if no custom one is set
+  const effectiveBackgroundImage = loginBackgroundImage || (backgroundImageError ? null : '/login-background.jpg');
   const [credentials, setCredentials] = useState<LoginCredentials>({
-    email: 'admin@ubs.com',
-    password: 'admin@ubs1234',
+    email: '',
+    password: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,34 +51,87 @@ const LoginScreen: React.FC = () => {
   const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [imagesLoaded, setImagesLoaded] = useState(false);
 
-  // Clear any stale storage on mount
-  React.useEffect(() => {
-    const storedUser = localStorage.getItem('ubs_erp_user');
-    if (storedUser) {
-      try {
-        const user = JSON.parse(storedUser);
-        // If stored user ID doesn't match expected, clear it
-        if (user.id && user.id !== '812b48ba-6bfe-44e8-815e-817154bada10') {
-          console.log('Clearing stale user data');
-          localStorage.removeItem('ubs_erp_user');
-        }
-      } catch (e) {
-        localStorage.removeItem('ubs_erp_user');
-      }
+  // Preload images for faster display
+  useEffect(() => {
+    // Reset error state when background image changes
+    if (loginBackgroundImage) {
+      setBackgroundImageError(false);
     }
+    
+    const imagesToPreload: string[] = [];
+    
+    // Preload login logo (custom, sidebar logo, or default)
+    if (loginLogo) {
+      imagesToPreload.push(loginLogo);
+    } else if (sidebarLogo) {
+      imagesToPreload.push(sidebarLogo);
+    } else if (!logoError) {
+      imagesToPreload.push('/ubs-logo.png');
+    }
+    
+    // Preload background image (custom or default)
+    if (loginBackgroundImage) {
+      imagesToPreload.push(loginBackgroundImage);
+    } else {
+      // Always try to preload default background image
+      imagesToPreload.push('/login-background.jpg');
+    }
+    
+    if (imagesToPreload.length === 0) {
+      setImagesLoaded(true);
+      return;
+    }
+
+    let loadedCount = 0;
+    const totalImages = imagesToPreload.length;
+
+    imagesToPreload.forEach((src) => {
+      const img = new Image();
+      img.onload = () => {
+        loadedCount++;
+        if (loadedCount === totalImages) {
+          setImagesLoaded(true);
+        }
+      };
+      img.onerror = () => {
+        if (src === '/login-background.jpg' && !loginBackgroundImage) {
+          setBackgroundImageError(true);
+        }
+        if (src === '/ubs-logo.png' && !loginLogo && !sidebarLogo) {
+          setLogoError(true);
+        }
+        loadedCount++;
+        if (loadedCount === totalImages) {
+          setImagesLoaded(true);
+        }
+      };
+      img.src = src;
+    });
+  }, [loginLogo, sidebarLogo, loginBackgroundImage, logoError]);
+
+  // Clear any stale storage on mount - don't block login
+  React.useEffect(() => {
+    // Don't clear storage automatically - let checkAuth handle it
+    // This was causing issues where valid sessions were cleared
   }, []);
 
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated && user) {
       console.log('User already authenticated, redirecting...', user.email, user.role);
-      // Redirect clients to their client dashboard
-      if (user.role === 'client') {
-        navigate(`/client/${user.id}`, { replace: true });
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
+      // Small delay to ensure state is fully set
+      const redirectTimer = setTimeout(() => {
+        // Redirect clients to their client dashboard
+        if (user.role === 'client') {
+          navigate(`/client/${user.id}`, { replace: true });
+        } else {
+          navigate('/dashboard', { replace: true });
+        }
+      }, 100);
+      
+      return () => clearTimeout(redirectTimer);
     }
   }, [isAuthenticated, user, navigate]);
 
@@ -92,38 +153,66 @@ const LoginScreen: React.FC = () => {
 
     try {
       console.log('Attempting login with:', credentials.email);
-      await login(credentials);
-      console.log('Login successful');
       
-      // Show success message
-      const successMsg = 'Login successful! Redirecting...';
-      setSuccessMessage(successMsg);
-      setSnackbarMessage(successMsg);
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
+      // Call login function with timeout
+      const loginPromise = login(credentials);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Login request timed out. Please try again.')), 30000)
+      );
       
-      // The useEffect hook will handle navigation when isAuthenticated changes
-      // But we'll also try to navigate directly as a fallback
-      setTimeout(() => {
-        const authState = useAuthStore.getState();
-        if (authState.isAuthenticated && authState.user) {
-          console.log('Navigating to dashboard...', authState.user.role);
-          // Redirect clients to their client dashboard
-          if (authState.user.role === 'client') {
-            navigate(`/client/${authState.user.id}`, { replace: true });
+      await Promise.race([loginPromise, timeoutPromise]);
+      
+      console.log('Login successful, checking auth state...');
+      
+      // Wait a moment for state to propagate
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
+      // Check auth state with retries
+      let retries = 0;
+      let finalAuthState = useAuthStore.getState();
+      
+      while ((!finalAuthState.isAuthenticated || !finalAuthState.user) && retries < 5) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        finalAuthState = useAuthStore.getState();
+        retries++;
+        console.log(`Checking auth state (attempt ${retries}/5)...`, {
+          isAuthenticated: finalAuthState.isAuthenticated,
+          hasUser: !!finalAuthState.user
+        });
+      }
+      
+      if (finalAuthState.isAuthenticated && finalAuthState.user) {
+        console.log('✅ User authenticated, redirecting...', finalAuthState.user.role);
+        
+        // Show success message briefly
+        const successMsg = 'Login successful! Redirecting...';
+        setSuccessMessage(successMsg);
+        setSnackbarMessage(successMsg);
+        setSnackbarSeverity('success');
+        setSnackbarOpen(true);
+        
+        // Small delay before redirect to ensure UI updates
+        setTimeout(() => {
+          // Redirect based on role
+          if (finalAuthState.user.role === 'client') {
+            navigate(`/client/${finalAuthState.user.id}`, { replace: true });
           } else {
             navigate('/dashboard', { replace: true });
           }
-        } else {
-          console.error('Login succeeded but user not authenticated in store');
-          const errorMsg = 'Login succeeded but session not established. Please try again.';
-          setError(errorMsg);
-          setSnackbarMessage(errorMsg);
-          setSnackbarSeverity('error');
-          setSnackbarOpen(true);
           setLoading(false);
-        }
-      }, 300);
+        }, 300);
+      } else {
+        console.error('❌ Login succeeded but user not authenticated in store after retries');
+        // Force a page reload to sync state
+        const errorMsg = 'Login succeeded but session not established. Refreshing page...';
+        setError(errorMsg);
+        setSnackbarMessage(errorMsg);
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      }
     } catch (err: any) {
       console.error('Login error:', err);
       let errorMessage = err?.message || 'Wrong credentials. Please check your email and password.';
@@ -179,12 +268,12 @@ const LoginScreen: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: loginBackgroundImage 
-          ? `url(${loginBackgroundImage}) center/cover no-repeat`
+        background: effectiveBackgroundImage 
+          ? `url(${effectiveBackgroundImage}) center/cover no-repeat`
           : loginBackgroundColor || 'linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%)',
         p: 2,
         position: 'relative',
-        '&::before': loginBackgroundImage ? {
+        '&::before': effectiveBackgroundImage ? {
           content: '""',
           position: 'absolute',
           top: 0,
@@ -206,17 +295,21 @@ const LoginScreen: React.FC = () => {
           }}
         >
           <Box sx={{ textAlign: 'center', mb: 4 }}>
-            {loginLogo ? (
+            {effectiveLoginLogo ? (
               <Box
                 component="img"
-                src={loginLogo}
+                src={effectiveLoginLogo}
                 alt="Logo"
+                onError={() => setLogoError(true)}
                 sx={{
                   maxHeight: 80,
                   maxWidth: '100%',
                   objectFit: 'contain',
                   mb: 2,
+                  opacity: imagesLoaded ? 1 : 0,
+                  transition: 'opacity 0.3s ease-in-out',
                 }}
+                loading="eager"
               />
             ) : (
               <Typography 

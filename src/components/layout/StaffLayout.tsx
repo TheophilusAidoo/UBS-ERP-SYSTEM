@@ -77,6 +77,7 @@ const StaffLayout: React.FC = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [logoError, setLogoError] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, user } = useAuthStore();
@@ -93,10 +94,11 @@ const StaffLayout: React.FC = () => {
   }, [initializeSettings]);
   
   // Reload global settings periodically to catch admin changes (from Supabase)
+  // Reduced frequency to improve performance (5 minutes instead of 3 seconds)
   React.useEffect(() => {
     const interval = setInterval(() => {
       initializeSettings();
-    }, 3000); // Check every 3 seconds
+    }, 300000); // Check every 5 minutes (reduced from 3 seconds for performance)
     
     return () => clearInterval(interval);
   }, [initializeSettings]);
@@ -196,11 +198,11 @@ const StaffLayout: React.FC = () => {
   };
 
   const drawer = (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff' }}>
       <Toolbar
         sx={{
-          background: sidebarColor || 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
-          color: 'white',
+          background: sidebarColor || '#ffffff',
+          color: sidebarColor && sidebarColor !== '#ffffff' ? 'white' : '#1f2937',
           minHeight: '64px !important',
           display: 'flex',
           alignItems: 'center',
@@ -218,10 +220,23 @@ const StaffLayout: React.FC = () => {
               objectFit: 'contain',
             }}
           />
-        ) : (
+        ) : logoError ? (
           <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 700, fontSize: '1.25rem' }}>
             UBS ERP
           </Typography>
+        ) : (
+          <Box
+            component="img"
+            src="/ubs-logo.png"
+            alt="UBS Logo"
+            onError={() => setLogoError(true)}
+            onLoad={() => setLogoError(false)}
+            sx={{
+              maxHeight: 40,
+              maxWidth: '100%',
+              objectFit: 'contain',
+            }}
+          />
         )}
       </Toolbar>
       <Divider />

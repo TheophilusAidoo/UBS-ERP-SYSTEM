@@ -38,40 +38,84 @@ export interface RegisterData {
 
 class AuthService {
   async login(credentials: LoginCredentials): Promise<{ user: User; session: any }> {
-    // Check if Supabase is properly configured
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    
-    if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('placeholder')) {
-      throw new Error('❌ Supabase not configured!\n\nPlease create a .env file with:\nVITE_SUPABASE_URL=your_supabase_url\nVITE_SUPABASE_ANON_KEY=your_anon_key\n\nThen restart the dev server.');
-    }
-
+    // Use the supabase client which already has fallback credentials
     console.log('🔐 Attempting login for:', credentials.email);
-    console.log('📡 Supabase URL:', supabaseUrl ? '✅ Set' : '❌ Missing');
+    console.log('📡 Using Supabase client with fallback credentials');
 
     try {
+      // Normalize email (trim and lowercase)
+      const normalizedEmail = credentials.email.trim().toLowerCase();
+      const normalizedPassword = credentials.password;
+
+      // Validate inputs
+      if (!normalizedEmail || !normalizedEmail.includes('@')) {
+        throw new Error('❌ Invalid email address. Please enter a valid email.');
+      }
+      
+      if (!normalizedPassword || normalizedPassword.length < 1) {
+        throw new Error('❌ Password is required.');
+      }
+
       let loginData: any = null;
       let loginError: any = null;
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: credentials.email,
-        password: credentials.password,
+      // Retry logic for network issues
+      let retryCount = 0;
+      const maxRetries = 2;
+      
+      while (retryCount <= maxRetries) {
+        try {
+          console.log(`🔄 Calling Supabase auth.signInWithPassword... (attempt ${retryCount + 1}/${maxRetries + 1})`);
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email: normalizedEmail,
+            password: normalizedPassword,
+          });
+
+          loginData = data;
+          loginError = error;
+          
+          // If successful or non-retryable error, break
+          if (!error || (!error.message?.includes('network') && !error.message?.includes('timeout'))) {
+            break;
+          }
+          
+          // If retryable error and we have retries left
+          if (retryCount < maxRetries) {
+            retryCount++;
+            console.log(`⚠️ Retryable error, retrying in ${retryCount * 500}ms...`);
+            await new Promise(resolve => setTimeout(resolve, retryCount * 500));
+            continue;
+          }
+          
+          break;
+        } catch (networkError: any) {
+          if (retryCount < maxRetries && (networkError.message?.includes('network') || networkError.message?.includes('timeout'))) {
+            retryCount++;
+            console.log(`⚠️ Network error, retrying in ${retryCount * 500}ms...`);
+            await new Promise(resolve => setTimeout(resolve, retryCount * 500));
+            continue;
+          }
+          throw networkError;
+        }
+      }
+      
+      console.log('📥 Supabase response:', { 
+        hasUser: !!loginData?.user, 
+        hasSession: !!loginData?.session, 
+        error: loginError?.message 
       });
 
-      loginData = data;
-      loginError = error;
-
-      if (error) {
-        console.error('❌ Login error:', error.message, error);
+      if (loginError) {
+        console.error('❌ Login error:', loginError.message, loginError);
         
         // Provide user-friendly error messages
-        if (error.message.includes('Email logins are disabled') || 
-            error.message.includes('Email provider is disabled') ||
-            (error.message.includes('email provider') && error.message.includes('disabled'))) {
+        if (loginError.message.includes('Email logins are disabled') || 
+            loginError.message.includes('Email provider is disabled') ||
+            (loginError.message.includes('email provider') && loginError.message.includes('disabled'))) {
           throw new Error('❌ Email logins are disabled in Supabase!\n\n🔧 To fix this:\n1. Go to Supabase Dashboard: https://supabase.com/dashboard\n2. Select your project\n3. Go to Authentication > Providers\n4. Find "Email" provider\n5. Click "Enable" toggle to enable it\n6. Save changes\n7. Try logging in again\n\n💡 Check ENABLE_EMAIL_LOGIN.md for detailed instructions.');
         }
         
-        if (error.message.includes('Email not confirmed')) {
+        if (loginError.message.includes('Email not confirmed')) {
           // Try to auto-confirm the email using admin client
           console.log('⚠️ Email not confirmed, attempting to auto-confirm...');
           const adminClient = getAdminClient();
@@ -310,22 +354,85 @@ class AuthService {
           company:companies(*)
         `)
         .eq('id', loginData.user.id)
-        .single();
+        .maybeSingle();
 
-      if (profileError) {
-        console.error('❌ Error fetching user profile:', profileError);
+      // Handle profile not found - try auto-create with retry
+      if (!userProfile || profileError) {
+        console.log('⚠️ User profile not found, attempting to create it...');
         
-        // Check if it's a "not found" error
-        if (profileError.code === 'PGRST116' || profileError.message.includes('No rows')) {
-          throw new Error(`❌ User profile not found in database!\n\n🔧 To fix:\n1. Go to Supabase Dashboard > SQL Editor\n2. Run: database/test-users.sql (if user is admin@ubs.com or staff@ubs.com)\n\nOR manually create profile:\n1. Go to Table Editor > users\n2. Create new row with:\n   - id: ${loginData.user.id}\n   - email: ${credentials.email}\n   - role: admin (or staff)\n   - Click Save\n\nThen try logging in again.`);
+        // Determine role based on email
+        const userRole = normalizedEmail === 'admin@ubs.com' ? 'admin' : 'staff';
+        
+        // Try with admin client first, then regular client
+        let newProfile = null;
+        let createError = null;
+        
+        // First attempt: Use admin client if available
+        const adminClient = getAdminClient();
+        if (adminClient) {
+          try {
+            const { data, error } = await adminClient
+              .from(TABLES.users)
+              .insert({
+                id: loginData.user.id,
+                email: normalizedEmail,
+                role: userRole,
+                first_name: loginData.user.user_metadata?.first_name || '',
+                last_name: loginData.user.user_metadata?.last_name || '',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .select()
+              .maybeSingle();
+            
+            if (!error && data) {
+              newProfile = data;
+            } else {
+              createError = error;
+            }
+          } catch (err: any) {
+            createError = err;
+          }
         }
         
-        throw new Error(`❌ Failed to fetch user profile: ${profileError.message}\n\nPlease contact administrator or check database connection.`);
-      }
-
-      if (!userProfile) {
-        console.error('❌ User profile is null');
-        throw new Error(`❌ User profile not found!\n\nPlease create the user profile in Supabase:\n1. Go to Table Editor > users\n2. Create row with id: ${loginData.user.id}, email: ${credentials.email}, role: admin`);
+        // Second attempt: Use regular client if admin client failed
+        if (!newProfile && !createError) {
+          try {
+            const { data, error } = await supabase
+              .from(TABLES.users)
+              .insert({
+                id: loginData.user.id,
+                email: normalizedEmail,
+                role: userRole,
+                first_name: loginData.user.user_metadata?.first_name || '',
+                last_name: loginData.user.user_metadata?.last_name || '',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .select()
+              .maybeSingle();
+            
+            if (!error && data) {
+              newProfile = data;
+            } else {
+              createError = error;
+            }
+          } catch (err: any) {
+            createError = err;
+          }
+        }
+        
+        if (newProfile) {
+          console.log('✅ Auto-created user profile:', newProfile);
+          const mappedUser = mapUserFromDB(newProfile) as User;
+          return {
+            user: mappedUser,
+            session: loginData.session,
+          };
+        } else {
+          console.error('❌ Failed to auto-create user profile:', createError);
+          throw new Error(`❌ User profile not found!\n\n🔧 Create manually:\n1. Supabase Dashboard > Table Editor > users\n2. Add row:\n   - id: ${loginData.user.id}\n   - email: ${normalizedEmail}\n   - role: ${userRole}\n3. Click Save\n\nThen try logging in again.`);
+        }
       }
 
       console.log('✅ User profile found:', userProfile.email, userProfile.role);
@@ -347,9 +454,29 @@ class AuthService {
       if (loginError.message && loginError.message.includes('❌')) {
         throw loginError;
       }
+      
+      // Handle network errors
+      if (loginError.message?.includes('Failed to fetch') || 
+          loginError.message?.includes('NetworkError') ||
+          loginError.message?.includes('network')) {
+        throw new Error('❌ Network error! Cannot connect to Supabase.\n\nPlease check:\n1. Internet connection\n2. Supabase service status\n3. Try again in a few seconds');
+      }
+      
+      // Handle timeout errors
+      if (loginError.message?.includes('timeout') || loginError.name === 'TimeoutError') {
+        throw new Error('❌ Request timed out. Please try again.');
+      }
+      
       // Otherwise wrap in friendly error
       console.error('❌ Unexpected login error:', loginError);
-      throw new Error(`❌ Login failed: ${loginError.message || 'Unknown error'}\n\nPlease check:\n1. Supabase connection\n2. User exists in Authentication > Users\n3. Email provider is enabled\n4. Try again in a few seconds`);
+      const errorMsg = loginError.message || 'Unknown error';
+      
+      // Provide specific guidance based on error
+      if (errorMsg.includes('Invalid login credentials') || errorMsg.includes('Invalid password')) {
+        throw new Error('❌ Invalid email or password!\n\nPlease verify:\n1. Email address is correct\n2. Password is correct\n3. User exists in Supabase Dashboard > Authentication > Users');
+      }
+      
+      throw new Error(`❌ Login failed: ${errorMsg}\n\nPlease check:\n1. Supabase connection\n2. User exists in Authentication > Users\n3. Email provider is enabled\n4. Try again in a few seconds`);
     }
   }
 
@@ -482,17 +609,34 @@ class AuthService {
         return null;
       }
 
-      // Check if user is a client first (by auth_user_id or email)
-      const { data: clientProfile, error: clientError } = await supabase
-        .from(TABLES.clients)
-        .select(`
-          *,
-          company:companies(*)
-        `)
-        .or(`auth_user_id.eq.${authUser.id},email.eq.${authUser.email || ''}`)
-        .eq('is_active', true)
-        .maybeSingle();
+      // OPTIMIZATION: Run both queries in parallel instead of sequentially
+      // This reduces total query time by ~50% since both queries execute simultaneously
+      const [clientResult, userResult] = await Promise.all([
+        // Check if user is a client (by auth_user_id or email)
+        supabase
+          .from(TABLES.clients)
+          .select(`
+            *,
+            company:companies(*)
+          `)
+          .or(`auth_user_id.eq.${authUser.id},email.eq.${authUser.email || ''}`)
+          .eq('is_active', true)
+          .maybeSingle(),
+        // Check if user is in users table
+        supabase
+          .from(TABLES.users)
+          .select(`
+            *,
+            company:companies(*)
+          `)
+          .eq('id', authUser.id)
+          .maybeSingle(),
+      ]);
 
+      const { data: clientProfile, error: clientError } = clientResult;
+      const { data: userProfile, error: userError } = userResult;
+
+      // Prioritize client profile if found
       if (clientProfile && !clientError) {
         // This is a client user
         return {
@@ -518,18 +662,9 @@ class AuthService {
         } as User;
       }
 
-      // If not a client, fetch from users table
-      const { data: userProfile, error } = await supabase
-        .from(TABLES.users)
-        .select(`
-          *,
-          company:companies(*)
-        `)
-        .eq('id', authUser.id)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error fetching user profile:', error);
+      // If not a client, use user profile
+      if (userError) {
+        console.error('Error fetching user profile:', userError);
         return null;
       }
 
@@ -592,6 +727,9 @@ class AuthService {
     let firstName = 'User';
     let userType = 'user';
     
+    // ALWAYS use production URL for reset password links (hardcoded to prevent localhost)
+    const resetPasswordUrl = 'https://ubscrm.com/reset-password';
+    
     if (users && !userError) {
       firstName = users.first_name || 'User';
       userType = 'staff';
@@ -602,7 +740,7 @@ class AuthService {
       // Don't reveal if user exists or not (security best practice)
       // Still generate reset token but don't send email
       await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: resetPasswordUrl,
       });
       return;
     }
@@ -611,14 +749,14 @@ class AuthService {
     // Supabase will send its own email, but we'll also send one via cPanel
     // The Supabase email will have the proper reset link with tokens
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: resetPasswordUrl,
     });
 
     // Send password reset email via cPanel (with instructions to use Supabase link)
     // Note: Users should use the Supabase-generated link from the email Supabase sends
     // or we could capture the token, but it's easier to let Supabase handle it
     try {
-      const resetUrl = `${window.location.origin}/reset-password`;
+      const resetUrl = resetPasswordUrl;
       
       const resetEmailHtml = `
         <!DOCTYPE html>

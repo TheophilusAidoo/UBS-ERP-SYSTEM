@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, memo, useCallback } from 'react';
 import { IconButton, Badge, Tooltip, Box } from '@mui/material';
 import { Notifications as NotificationsIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -62,10 +62,10 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ userId }) => {
     // Initialize notifications
     initializeNotifications(userId);
     
-    // Set up real-time checking
+    // Set up real-time checking - reduced from 3s to 10s for better performance
     const checkInterval = setInterval(() => {
       checkUnreadMessages(userId);
-    }, 3000); // Check every 3 seconds
+    }, 10000); // Check every 10 seconds (was 3 seconds)
 
     return () => {
       clearInterval(checkInterval);
@@ -146,10 +146,10 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ userId }) => {
     };
   }, [isRinging, unreadCount]);
 
-  const handleClick = () => {
+  const handleClick = useCallback(() => {
     stopRinging();
     navigate('/messages');
-  };
+  }, [stopRinging, navigate]);
 
   return (
     <Tooltip title={unreadCount > 0 ? `${unreadCount} unread message${unreadCount > 1 ? 's' : ''}` : 'No new messages'}>
@@ -196,5 +196,5 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ userId }) => {
   );
 };
 
-export default NotificationBell;
+export default memo(NotificationBell);
 

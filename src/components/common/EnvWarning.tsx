@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Alert, AlertTitle, Box } from '@mui/material';
 import { Link } from '@mui/material';
 
@@ -24,6 +24,6 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
   );
 };
 
-export default EnvWarning;
+export default memo(EnvWarning);
 
 

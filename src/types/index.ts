@@ -29,6 +29,8 @@ export interface Company {
   phone?: string;
   email?: string;
   logo?: string;
+  website?: string;
+  taxId?: string; // VAT/Tax Identification Number
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
