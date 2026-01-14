@@ -19,6 +19,9 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Dialog,
+  DialogContent,
+  DialogTitle,
 } from '@mui/material';
 import {
   Message as MessageIcon,
@@ -66,6 +69,7 @@ const MessagesScreen: React.FC = () => {
   const [selectedUserForNew, setSelectedUserForNew] = useState<string>('');
   const [attachments, setAttachments] = useState<Array<{ type: 'file' | 'image'; url: string; name: string; size?: number }>>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -709,11 +713,12 @@ const MessagesScreen: React.FC = () => {
             boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
             overflow: 'hidden',
           }}>
-            <CardContent sx={{ p: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <CardContent sx={{ p: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
               <Box sx={{ 
                 p: 2.5, 
                 borderBottom: '1px solid rgba(0,0,0,0.08)',
                 backgroundColor: '#f8fafc',
+                flexShrink: 0,
               }}>
                 <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
                   {t('messages.title')}
@@ -723,20 +728,24 @@ const MessagesScreen: React.FC = () => {
                 </Typography>
               </Box>
               <Box sx={{ 
-                flex: 1, 
-                overflow: 'auto', 
+                flex: '1 1 auto',
+                overflowY: 'auto',
+                overflowX: 'hidden',
                 backgroundColor: 'background.paper',
+                minHeight: 0, // Critical for flex scrolling
+                height: 0, // Force height calculation
                 '&::-webkit-scrollbar': {
-                  width: '8px',
+                  width: '10px',
                 },
                 '&::-webkit-scrollbar-track': {
-                  backgroundColor: 'transparent',
+                  backgroundColor: 'rgba(0,0,0,0.05)',
+                  borderRadius: '5px',
                 },
                 '&::-webkit-scrollbar-thumb': {
-                  backgroundColor: 'rgba(0,0,0,0.2)',
-                  borderRadius: '4px',
+                  backgroundColor: 'rgba(0,0,0,0.25)',
+                  borderRadius: '5px',
                   '&:hover': {
-                    backgroundColor: 'rgba(0,0,0,0.3)',
+                    backgroundColor: 'rgba(0,0,0,0.4)',
                   },
                 },
               }}>
@@ -1017,7 +1026,8 @@ const MessagesScreen: React.FC = () => {
                             <img
                               src={attachment.url}
                               alt={attachment.name}
-                              style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }}
+                              style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }}
+                              onClick={() => setPreviewImage({ url: attachment.url, name: attachment.name })}
                             />
                           ) : (
                             <Description sx={{ fontSize: 24, color: 'text.secondary' }} />
@@ -1146,11 +1156,12 @@ const MessagesScreen: React.FC = () => {
                 </Box>
               </CardContent>
             ) : (selectedUser || selectedClient) ? (
-              <CardContent sx={{ p: 0, flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <CardContent sx={{ p: 0, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
                 <Box sx={{ 
                   p: 2.5, 
                   borderBottom: '1px solid rgba(0,0,0,0.08)',
                   backgroundColor: '#f8fafc',
+                  flexShrink: 0,
                 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     <Avatar sx={{ 
@@ -1183,21 +1194,25 @@ const MessagesScreen: React.FC = () => {
                   </Box>
                 </Box>
                 <Box sx={{ 
-                  flex: 1, 
-                  overflow: 'auto', 
+                  flex: '1 1 auto',
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
                   p: 3, 
                   backgroundColor: '#f8fafc',
+                  minHeight: 0, // Critical for flex scrolling
+                  height: 0, // Force height calculation
                   '&::-webkit-scrollbar': {
-                    width: '8px',
+                    width: '10px',
                   },
                   '&::-webkit-scrollbar-track': {
-                    backgroundColor: 'transparent',
+                    backgroundColor: 'rgba(0,0,0,0.05)',
+                    borderRadius: '5px',
                   },
                   '&::-webkit-scrollbar-thumb': {
-                    backgroundColor: 'rgba(0,0,0,0.2)',
-                    borderRadius: '4px',
+                    backgroundColor: 'rgba(0,0,0,0.25)',
+                    borderRadius: '5px',
                     '&:hover': {
-                      backgroundColor: 'rgba(0,0,0,0.3)',
+                      backgroundColor: 'rgba(0,0,0,0.4)',
                     },
                   },
                 }}>
@@ -1301,14 +1316,14 @@ const MessagesScreen: React.FC = () => {
                                               borderRadius: 4,
                                               cursor: 'pointer',
                                             }}
-                                            onClick={() => window.open(attachment.url, '_blank')}
+                                            onClick={() => setPreviewImage({ url: attachment.url, name: attachment.name })}
                                           />
                                           <Box sx={{ flex: 1, minWidth: 0 }}>
                                             <Typography variant="caption" sx={{ display: 'block', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                               {attachment.name}
                                             </Typography>
                                             <Typography variant="caption" sx={{ opacity: isOwnMessage ? 0.8 : 0.7 }}>
-                                              Image
+                                              Image • Click to preview
                                             </Typography>
                                           </Box>
                                         </>
@@ -1361,6 +1376,7 @@ const MessagesScreen: React.FC = () => {
                   p: 2.5, 
                   backgroundColor: 'white',
                   borderTop: '1px solid rgba(0,0,0,0.08)',
+                  flexShrink: 0,
                 }}>
                   {attachments.length > 0 && (
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
@@ -1385,7 +1401,9 @@ const MessagesScreen: React.FC = () => {
                             <img
                               src={attachment.url}
                               alt={attachment.name}
-                              style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }}
+                              style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }}
+                              onClick={() => setPreviewImage({ url: attachment.url, name: attachment.name })}
+                              title="Click to preview full size"
                             />
                           ) : (
                             <Description sx={{ fontSize: 24, color: 'text.secondary' }} />
@@ -1565,6 +1583,66 @@ const MessagesScreen: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Image Preview Dialog */}
+      <Dialog
+        open={!!previewImage}
+        onClose={() => setPreviewImage(null)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            maxHeight: '95vh',
+          },
+        }}
+      >
+        <DialogTitle sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          color: 'white',
+          pb: 1,
+        }}>
+          <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
+            {previewImage?.name || 'Image Preview'}
+          </Typography>
+          <IconButton
+            onClick={() => setPreviewImage(null)}
+            sx={{ color: 'white', '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
+          >
+            <Close />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ 
+          p: 2, 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center',
+          backgroundColor: 'rgba(0, 0, 0, 0.9)',
+        }}>
+          {previewImage && (
+            <Box sx={{ 
+              maxWidth: '100%', 
+              maxHeight: '85vh',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}>
+              <img
+                src={previewImage.url}
+                alt={previewImage.name}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '85vh',
+                  objectFit: 'contain',
+                  borderRadius: 8,
+                }}
+              />
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 };

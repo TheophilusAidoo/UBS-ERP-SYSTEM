@@ -16,6 +16,9 @@ import {
   InputAdornment,
   Chip,
   Divider,
+  Dialog,
+  DialogContent,
+  DialogTitle,
 } from '@mui/material';
 import {
   Message as MessageIcon,
@@ -25,6 +28,7 @@ import {
   Business,
   Person,
   Dashboard,
+  Close,
 } from '@mui/icons-material';
 import { clientService } from '../../services/client.service';
 import { messageService, CreateMessageData } from '../../services/message.service';
@@ -46,6 +50,7 @@ const ClientMessagesScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Initialize global settings to get the primary color
@@ -258,9 +263,31 @@ const ClientMessagesScreen: React.FC = () => {
         )}
 
         {/* Messages Card */}
-        <Card sx={{ borderRadius: 3, boxShadow: 3, height: 'calc(100vh - 280px)', display: 'flex', flexDirection: 'column' }}>
+        <Card sx={{ borderRadius: 3, boxShadow: 3, height: 'calc(100vh - 280px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {/* Messages List */}
-          <CardContent sx={{ flex: 1, overflow: 'auto', p: 3, bgcolor: 'grey.50' }}>
+          <CardContent sx={{ 
+            flex: '1 1 auto',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            p: 3, 
+            bgcolor: 'grey.50',
+            minHeight: 0, // Critical for flex scrolling
+            height: 0, // Force height calculation
+            '&::-webkit-scrollbar': {
+              width: '10px',
+            },
+            '&::-webkit-scrollbar-track': {
+              backgroundColor: 'rgba(0,0,0,0.05)',
+              borderRadius: '5px',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              backgroundColor: 'rgba(0,0,0,0.25)',
+              borderRadius: '5px',
+              '&:hover': {
+                backgroundColor: 'rgba(0,0,0,0.4)',
+              },
+            },
+          }}>
             {loading && messages.length === 0 ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
                 <CircularProgress />
@@ -373,7 +400,7 @@ const ClientMessagesScreen: React.FC = () => {
                           <Typography 
                             variant="body1" 
                             sx={{ 
-                              mb: 1, 
+                              mb: message.attachments && message.attachments.length > 0 ? 1.5 : 1, 
                               whiteSpace: 'pre-wrap',
                               lineHeight: 1.6,
                               wordBreak: 'break-word',
@@ -381,6 +408,72 @@ const ClientMessagesScreen: React.FC = () => {
                           >
                             {message.content}
                           </Typography>
+                          {message.attachments && message.attachments.length > 0 && (
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 1 }}>
+                              {message.attachments.map((attachment, idx) => (
+                                <Box
+                                  key={idx}
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 1,
+                                    p: 1.5,
+                                    borderRadius: 2,
+                                    backgroundColor: isFromClient ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                                  }}
+                                >
+                                  {attachment.type === 'image' ? (
+                                    <>
+                                      <img
+                                        src={attachment.url}
+                                        alt={attachment.name}
+                                        style={{
+                                          width: 80,
+                                          height: 80,
+                                          objectFit: 'cover',
+                                          borderRadius: 8,
+                                          cursor: 'pointer',
+                                        }}
+                                        onClick={() => setPreviewImage({ url: attachment.url, name: attachment.name })}
+                                      />
+                                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                                        <Typography variant="caption" sx={{ display: 'block', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isFromClient ? 'rgba(255,255,255,0.9)' : 'text.primary' }}>
+                                          {attachment.name}
+                                        </Typography>
+                                        <Typography variant="caption" sx={{ opacity: isFromClient ? 0.8 : 0.7, color: isFromClient ? 'rgba(255,255,255,0.8)' : 'text.secondary' }}>
+                                          Image • Click to preview
+                                        </Typography>
+                                      </Box>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Box sx={{ 
+                                        width: 80, 
+                                        height: 80, 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'center',
+                                        backgroundColor: isFromClient ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                                        borderRadius: 2,
+                                      }}>
+                                        <Typography sx={{ fontSize: 24, color: isFromClient ? 'rgba(255,255,255,0.8)' : 'text.secondary' }}>📄</Typography>
+                                      </Box>
+                                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                                        <Typography variant="caption" sx={{ display: 'block', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isFromClient ? 'rgba(255,255,255,0.9)' : 'text.primary' }}>
+                                          {attachment.name}
+                                        </Typography>
+                                        {attachment.size && (
+                                          <Typography variant="caption" sx={{ opacity: isFromClient ? 0.8 : 0.7, color: isFromClient ? 'rgba(255,255,255,0.8)' : 'text.secondary' }}>
+                                            {(attachment.size / 1024).toFixed(1)} KB
+                                          </Typography>
+                                        )}
+                                      </Box>
+                                    </>
+                                  )}
+                                </Box>
+                              ))}
+                            </Box>
+                          )}
                           <Typography
                             variant="caption"
                             sx={{
@@ -420,6 +513,7 @@ const ClientMessagesScreen: React.FC = () => {
               borderTop: '1px solid',
               borderColor: 'divider',
               bgcolor: 'white',
+              flexShrink: 0,
             }}
           >
             <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-end' }}>
@@ -482,6 +576,66 @@ const ClientMessagesScreen: React.FC = () => {
           </Box>
         </Card>
       </Box>
+
+      {/* Image Preview Dialog */}
+      <Dialog
+        open={!!previewImage}
+        onClose={() => setPreviewImage(null)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            maxHeight: '95vh',
+          },
+        }}
+      >
+        <DialogTitle sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          color: 'white',
+          pb: 1,
+        }}>
+          <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
+            {previewImage?.name || 'Image Preview'}
+          </Typography>
+          <IconButton
+            onClick={() => setPreviewImage(null)}
+            sx={{ color: 'white', '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
+          >
+            <Close />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ 
+          p: 2, 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center',
+          backgroundColor: 'rgba(0, 0, 0, 0.9)',
+        }}>
+          {previewImage && (
+            <Box sx={{ 
+              maxWidth: '100%', 
+              maxHeight: '85vh',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}>
+              <img
+                src={previewImage.url}
+                alt={previewImage.name}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '85vh',
+                  objectFit: 'contain',
+                  borderRadius: 8,
+                }}
+              />
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 };
