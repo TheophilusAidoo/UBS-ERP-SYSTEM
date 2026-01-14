@@ -836,24 +836,41 @@ class AuthService {
   }
 
   async changeUserPassword(userId: string, newPassword: string): Promise<void> {
-    // Note: Changing another user's password requires Supabase Admin API
-    // which needs the service role key (should be on backend only)
-    // For now, this will work if you have admin privileges in Supabase
-    // In production, this should be done via a backend API endpoint
+    // Validate password
+    if (!newPassword || newPassword.length < 6) {
+      throw new Error('Password must be at least 6 characters long');
+    }
+
+    // Use admin client (service role) to change password - same approach as staff creation
+    const adminClient = getAdminClient();
+    
+    if (!adminClient) {
+      throw new Error('Admin client not available. Please ensure VITE_SUPABASE_SERVICE_ROLE_KEY is set in your .env file.');
+    }
+
     try {
-      // This requires admin privileges - will work if user is admin in Supabase
-      const { error } = await supabase.auth.admin.updateUserById(userId, {
+      // Use admin client to update password - this bypasses RLS and works immediately
+      const { data, error } = await adminClient.auth.admin.updateUserById(userId, {
         password: newPassword,
       });
+
       if (error) {
-        throw new Error(`Failed to update password: ${error.message}. Note: Admin password changes may require backend API support.`);
+        console.error('❌ Admin client password update error:', error);
+        throw new Error(`Failed to update password: ${error.message}`);
       }
+
+      if (!data || !data.user) {
+        throw new Error('Password update succeeded but no user data returned');
+      }
+
+      console.log('✅ Password updated successfully for user:', data.user.id);
     } catch (err: any) {
-      // If admin API is not available, provide helpful error
-      if (err.message?.includes('admin')) {
-        throw new Error('Admin password changes require backend API support. Please use Supabase Dashboard or contact system administrator.');
+      console.error('❌ Password update error:', err);
+      // Provide helpful error message
+      if (err.message?.includes('Admin client not available')) {
+        throw err; // Re-throw with original message
       }
-      throw err;
+      throw new Error(err?.message || 'Failed to update password. Please try again.');
     }
   }
 }

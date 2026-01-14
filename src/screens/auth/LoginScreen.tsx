@@ -21,6 +21,9 @@ import {
 } from '@mui/material';
 import EmailIcon from '@mui/icons-material/Email';
 import LockIcon from '@mui/icons-material/Lock';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import IconButton from '@mui/material/IconButton';
 import { useTranslation } from 'react-i18next';
 import { LoginCredentials, authService } from '../../services/auth.service';
 import { useGlobalSettingsStore } from '../../store/global-settings.store';
@@ -52,6 +55,7 @@ const LoginScreen: React.FC = () => {
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [imagesLoaded, setImagesLoaded] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Preload images for faster display
   useEffect(() => {
@@ -409,7 +413,7 @@ const LoginScreen: React.FC = () => {
           <TextField
             fullWidth
             label={t('auth.password')}
-            type="password"
+            type={showPassword ? 'text' : 'password'}
             value={credentials.password}
             onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
             margin="normal"
@@ -424,6 +428,19 @@ const LoginScreen: React.FC = () => {
               startAdornment: (
                 <InputAdornment position="start">
                   <LockIcon color="action" />
+                </InputAdornment>
+              ),
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label="toggle password visibility"
+                    onClick={() => setShowPassword(!showPassword)}
+                    edge="end"
+                    size="small"
+                    disabled={loading}
+                  >
+                    {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                  </IconButton>
                 </InputAdornment>
               ),
             }}
