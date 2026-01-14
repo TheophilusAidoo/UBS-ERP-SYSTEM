@@ -1,0 +1,13 @@
+# Copy and paste these commands in your terminal:
+
+cd "/Users/alphamac/Downloads/UBS ERP "
+
+git remote set-url origin https://github.com/TheophilusAidoo/UBS-ERP-SYSTEM.git
+
+git remote -v
+
+git push -u origin main
+
+# When prompted:
+# Username: TheophilusAidoo
+# Password: [Use Personal Access Token from https://github.com/settings/tokens]
