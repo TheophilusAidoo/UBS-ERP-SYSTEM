@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { messageService } from '../services/message.service';
+import { userPreferencesService } from '../services/user-preferences.service';
 // import { useAuthStore } from './auth.store';
 
 interface NotificationState {
@@ -9,7 +10,7 @@ interface NotificationState {
   setUnreadCount: (count: number) => void;
   checkUnreadMessages: (userId: string) => Promise<void>;
   requestNotificationPermission: () => Promise<boolean>;
-  showNotification: (title: string, body: string, onClick?: () => void) => void;
+  showNotification: (title: string, body: string, onClick?: () => void, type?: 'push' | 'email' | 'leave' | 'invoice') => void;
   startRinging: () => void;
   stopRinging: () => void;
   initializeNotifications: (userId: string) => Promise<void>;
@@ -67,13 +68,17 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     return permission === 'granted';
   },
 
-  showNotification: (title: string, body: string, onClick?: () => void) => {
+  showNotification: async (title: string, body: string, onClick?: () => void, type: 'push' | 'email' | 'leave' | 'invoice' = 'push') => {
+    // Check user preferences if userId is available
+    // For now, we'll check preferences in the calling code
+    // This function will show the notification if preferences allow it
+    
     if (typeof Notification === 'undefined') return;
     
     if (get().notificationPermission !== 'granted') {
       get().requestNotificationPermission().then((granted) => {
         if (granted) {
-          get().showNotification(title, body, onClick);
+          get().showNotification(title, body, onClick, type);
         }
       });
       return;

@@ -61,6 +61,7 @@ import { useGlobalSettingsStore, Currency } from '../../store/global-settings.st
 import { useUserCurrencyStore } from '../../store/user-currency.store';
 import { useLanguageStore } from '../../store/language.store';
 import { globalSettingsService } from '../../services/global-settings.service';
+import { userPreferencesService, UserPreferences } from '../../services/user-preferences.service';
 
 const SettingsScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -130,6 +131,10 @@ const SettingsScreen: React.FC = () => {
   const [showSmtpPassword, setShowSmtpPassword] = useState(false);
   const [testEmailTo, setTestEmailTo] = useState('');
   
+  // Notification preferences state
+  const [notificationPreferences, setNotificationPreferences] = useState<UserPreferences | null>(null);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  
   // Use global currency for admin, user currency for staff
   const currency = isAdmin ? globalCurrency : userCurrency;
   const currencySymbol = isAdmin ? globalCurrencySymbol : userCurrencySymbol;
@@ -147,6 +152,74 @@ const SettingsScreen: React.FC = () => {
       loadEmailSettings();
     }
   }, [isAdmin]);
+
+  // Load notification preferences on mount
+  React.useEffect(() => {
+    if (user) {
+      loadNotificationPreferences();
+    }
+  }, [user]);
+
+  // Load notification preferences
+  const loadNotificationPreferences = async () => {
+    if (!user) return;
+    try {
+      setNotificationLoading(true);
+      const preferences = await userPreferencesService.getUserPreferences(user.id);
+      setNotificationPreferences(preferences);
+    } catch (err: any) {
+      console.error('Error loading notification preferences:', err);
+      setError('Failed to load notification preferences');
+    } finally {
+      setNotificationLoading(false);
+    }
+  };
+
+  // Handle notification preference change
+  const handleNotificationPreferenceChange = async (
+    type: 'emailNotifications' | 'pushNotifications' | 'leaveRequestAlerts' | 'invoiceUpdates',
+    value: boolean
+  ) => {
+    if (!user) return;
+    
+    try {
+      setNotificationLoading(true);
+      
+      // Update local state immediately for better UX
+      setNotificationPreferences((prev) => {
+        if (!prev) return null;
+        return { ...prev, [type]: value };
+      });
+
+      // Save to database
+      const updateData: any = { [type]: value };
+      const success = await userPreferencesService.updateUserPreferences(user.id, updateData);
+      
+      if (success) {
+        setSuccess('Notification preferences updated successfully');
+        setTimeout(() => setSuccess(null), 2000);
+      } else {
+        // Revert on error
+        setNotificationPreferences((prev) => {
+          if (!prev) return null;
+          return { ...prev, [type]: !value };
+        });
+        setError('Failed to update notification preferences');
+        setTimeout(() => setError(null), 3000);
+      }
+    } catch (err: any) {
+      console.error('Error updating notification preference:', err);
+      // Revert on error
+      setNotificationPreferences((prev) => {
+        if (!prev) return null;
+        return { ...prev, [type]: !value };
+      });
+      setError('Failed to update notification preferences');
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setNotificationLoading(false);
+    }
+  };
 
   const loadEmailSettings = async () => {
     try {
@@ -1926,25 +1999,36 @@ const SettingsScreen: React.FC = () => {
                   </Box>
                 </Stack>
                 <Divider sx={{ mb: 3 }} />
-                <Stack spacing={2} sx={{ flex: 1 }}>
-                  <Paper
-                    variant="outlined"
-                    sx={{
-                      p: 2,
-                      borderRadius: 2,
-                      backgroundColor: 'background.default',
-                    }}
-                  >
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="body1" sx={{ fontWeight: 500, mb: 0.5 }}>
-                          Email Notifications
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" noWrap>
-                          Receive email updates about important events
-                        </Typography>
-                      </Box>
-                      <Switch defaultChecked color="primary" sx={{ ml: 2, flexShrink: 0 }} />
+                {notificationLoading && notificationPreferences === null ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                    <CircularProgress size={32} />
+                  </Box>
+                ) : (
+                  <Stack spacing={2} sx={{ flex: 1 }}>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 2,
+                        borderRadius: 2,
+                        backgroundColor: 'background.default',
+                      }}
+                    >
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography variant="body1" sx={{ fontWeight: 500, mb: 0.5 }}>
+                            Email Notifications
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" noWrap>
+                            Receive email updates about important events
+                          </Typography>
+                        </Box>
+                        <Switch 
+                        checked={notificationPreferences?.emailNotifications ?? true}
+                        onChange={(e) => handleNotificationPreferenceChange('emailNotifications', e.target.checked)}
+                        disabled={notificationLoading}
+                        color="primary" 
+                        sx={{ ml: 2, flexShrink: 0 }} 
+                      />
                     </Stack>
                   </Paper>
                   
@@ -1965,7 +2049,13 @@ const SettingsScreen: React.FC = () => {
                           Get real-time notifications in the app
                         </Typography>
                       </Box>
-                      <Switch defaultChecked color="primary" sx={{ ml: 2, flexShrink: 0 }} />
+                      <Switch 
+                        checked={notificationPreferences?.pushNotifications ?? true}
+                        onChange={(e) => handleNotificationPreferenceChange('pushNotifications', e.target.checked)}
+                        disabled={notificationLoading}
+                        color="primary" 
+                        sx={{ ml: 2, flexShrink: 0 }} 
+                      />
                     </Stack>
                   </Paper>
                   
@@ -1986,7 +2076,13 @@ const SettingsScreen: React.FC = () => {
                           Notify when leave requests are approved or rejected
                         </Typography>
                       </Box>
-                      <Switch defaultChecked color="primary" sx={{ ml: 2, flexShrink: 0 }} />
+                      <Switch 
+                        checked={notificationPreferences?.leaveRequestAlerts ?? true}
+                        onChange={(e) => handleNotificationPreferenceChange('leaveRequestAlerts', e.target.checked)}
+                        disabled={notificationLoading}
+                        color="primary" 
+                        sx={{ ml: 2, flexShrink: 0 }} 
+                      />
                     </Stack>
                   </Paper>
                   
@@ -2007,10 +2103,17 @@ const SettingsScreen: React.FC = () => {
                           Get notified about invoice status changes
                         </Typography>
                       </Box>
-                      <Switch defaultChecked color="primary" sx={{ ml: 2, flexShrink: 0 }} />
+                      <Switch 
+                        checked={notificationPreferences?.invoiceUpdates ?? true}
+                        onChange={(e) => handleNotificationPreferenceChange('invoiceUpdates', e.target.checked)}
+                        disabled={notificationLoading}
+                        color="primary" 
+                        sx={{ ml: 2, flexShrink: 0 }} 
+                      />
                     </Stack>
                   </Paper>
                 </Stack>
+                )}
               </CardContent>
             </Card>
           </Grid>

@@ -106,6 +106,24 @@ class LeaveService {
       await this.updateLeaveBalanceOnApproval(leaveRequest.user_id, leaveRequest.type);
     }
 
+    // Create notification for the staff member about leave request status
+    if (data.status === 'approved' || data.status === 'rejected') {
+      try {
+        const { notificationService } = await import('./notification.service');
+        const statusText = data.status === 'approved' ? 'approved' : 'rejected';
+        await notificationService.createNotification({
+          userId: leaveRequest.user_id,
+          type: 'leave',
+          title: `Leave Request ${statusText.charAt(0).toUpperCase() + statusText.slice(1)}`,
+          message: `Your leave request has been ${statusText}.`,
+          relatedId: leaveRequest.id,
+        });
+      } catch (err) {
+        console.warn('Failed to create leave notification:', err);
+        // Don't fail the leave update if notification fails
+      }
+    }
+
     return {
       id: leaveRequest.id,
       userId: leaveRequest.user_id,

@@ -305,6 +305,28 @@ class InvoiceService {
 
     if (error) throw error;
 
+    // Create notification for invoice creator about status change
+    if (invoice.created_by && (data.status === 'sent' || data.status === 'paid' || data.status === 'cancelled')) {
+      try {
+        const { notificationService } = await import('./notification.service');
+        const statusMessages: Record<string, string> = {
+          sent: 'has been sent to the client',
+          paid: 'has been marked as paid',
+          cancelled: 'has been cancelled',
+        };
+        await notificationService.createNotification({
+          userId: invoice.created_by,
+          type: 'invoice',
+          title: `Invoice ${invoice.invoice_number} Updated`,
+          message: `Invoice ${invoice.invoice_number} ${statusMessages[data.status] || 'status has been updated'}.`,
+          relatedId: invoice.id,
+        });
+      } catch (err) {
+        console.warn('Failed to create invoice notification:', err);
+        // Don't fail the invoice update if notification fails
+      }
+    }
+
     return this.getInvoice(data.id);
   }
 
