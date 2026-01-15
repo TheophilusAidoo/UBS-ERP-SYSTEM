@@ -3,7 +3,6 @@
 # Kill all existing email server processes and start fresh
 
 echo "🛑 Stopping all email server processes..."
-pkill -f "email-server.js" 2>/dev/null
 pkill -f "app.cjs" 2>/dev/null
 lsof -ti:3001 | xargs kill -9 2>/dev/null
 sleep 2

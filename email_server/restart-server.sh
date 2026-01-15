@@ -8,7 +8,7 @@ echo "🛑 Stopping any running email servers on port 3001..."
 lsof -ti:3001 | xargs kill -9 2>/dev/null || echo "No server running on port 3001"
 
 # Also kill any node processes running email-server.js
-pkill -f "email-server.js" 2>/dev/null || echo "No email-server.js processes found"
+pkill -f "app.cjs" 2>/dev/null || echo "No app.cjs processes found"
 
 echo "⏳ Waiting 2 seconds for processes to terminate..."
 sleep 2
@@ -31,4 +31,4 @@ fi
 
 # Start the server
 echo "🚀 Starting email server on port 3001..."
-node email-server.js
+node app.cjs
