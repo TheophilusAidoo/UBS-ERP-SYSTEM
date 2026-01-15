@@ -30,9 +30,9 @@ const createOptimizedClient = (url: string, key: string, isDummy: boolean = fals
     global: {
       // Use native fetch without aggressive timeout - let browser handle it
       // Only add timeout for very long operations if needed
-      fetch: (url, options = {}) => {
+      fetch: (url, options: RequestInit = {}) => {
         // Respect existing signals
-        const existingSignal = (options as RequestInit).signal;
+        const existingSignal = options.signal;
         
         // For most requests, use native fetch without timeout
         // Only add timeout for very specific long-running operations
