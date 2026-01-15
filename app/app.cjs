@@ -19,7 +19,7 @@ if (!fs.existsSync(distPath)) {
   console.error('❌ ERROR: dist folder not found!');
   console.error('📝 Please run "npm run build" first to build the application.');
   console.error('   Then run "node app.cjs" to start the server.');
-  process.exit(1);
+  process.exit(1);s
 }
 
 // Check if index.html exists in dist
@@ -46,30 +46,6 @@ app.use(express.static(distPath, {
   index: false, // Don't auto-serve index.html, we'll handle it manually
 }));
 
-// API proxy for email server (optional - if running on same server)
-app.use('/api/email', (req, res, next) => {
-  // If email server is on a different port, proxy requests here
-  // For now, return 404 to indicate email server should be on separate port
-  res.status(404).json({ error: 'Email server endpoint not available. Use backend/email-server.js on port 3001.' });
-});
-
-// Handle React Router - serve index.html for all non-API routes
-// This ensures client-side routing works correctly (SPA behavior)
-app.get('*', (req, res, next) => {
-  // Skip API routes
-  if (req.path.startsWith('/api/')) {
-    return next();
-  }
-  
-  // Send index.html for all other routes (React Router will handle routing)
-  res.sendFile(indexPath, (err) => {
-    if (err) {
-      console.error('Error sending index.html:', err);
-      res.status(500).send('Error loading application');
-    }
-  });
-});
-
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
@@ -79,10 +55,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler for unmatched API routes
-app.use('/api/*', (req, res) => {
-  res.status(404).json({ error: 'API endpoint not found' });
-});
 
 // Start the server
 // Use '0.0.0.0' to accept connections from all network interfaces (for cPanel)
