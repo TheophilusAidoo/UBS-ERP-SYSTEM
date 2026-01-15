@@ -19,7 +19,7 @@ if (!fs.existsSync(distPath)) {
   console.error('❌ ERROR: dist folder not found!');
   console.error('📝 Please run "npm run build" first to build the application.');
   console.error('   Then run "node app.cjs" to start the server.');
-  process.exit(1);s
+  process.exit(1);
 }
 
 // Check if index.html exists in dist
@@ -46,7 +46,13 @@ app.use(express.static(distPath, {
   index: false, // Don't auto-serve index.html, we'll handle it manually
 }));
 
-// Error handling middleware
+// SPA fallback: serve index.html for all routes that don't match static files
+// This allows React Router to handle client-side routing
+app.get('*', (req, res) => {
+  res.sendFile(indexPath);
+});
+
+// Error handling middleware (must be after all routes)
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
   res.status(500).json({ 
