@@ -356,7 +356,7 @@ const SettingsScreen: React.FC = () => {
     try {
       // Direct API call to email server with SMTP settings from form
       // Email server runs on port 3001 (separate from frontend on 3003)
-      const emailServerUrl = import.meta.env.VITE_EMAIL_SERVER_URL || 'http://localhost:3001';
+      const emailServerUrl = import.meta.env.VITE_EMAIL_SERVER_URL;
       
       // First, check if email server is running (quick check, don't wait long)
       console.log('🔍 Checking if email server is running at:', emailServerUrl);

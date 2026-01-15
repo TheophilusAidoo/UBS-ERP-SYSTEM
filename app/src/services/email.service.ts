@@ -182,7 +182,7 @@ class EmailService {
     try {
       // Direct API call to email server
       // Email server runs on port 3001 (separate from frontend on 3003)
-      const emailServerUrl = import.meta.env.VITE_EMAIL_SERVER_URL || 'http://localhost:3001';
+      const emailServerUrl = import.meta.env.VITE_EMAIL_SERVER_URL;
       
       console.log('📧 Sending email via server:', emailServerUrl);
       
@@ -299,7 +299,7 @@ class EmailService {
       if (errorMsg.includes('Failed to fetch') || errorMsg.includes('network') || errorMsg.includes('ECONNREFUSED')) {
         return {
           success: false,
-          message: `Cannot connect to email server at ${import.meta.env.VITE_EMAIL_SERVER_URL || 'http://localhost:3001'}.\n\nPlease make sure the email server is running:\n1. Open terminal\n2. Run: cd backend && node email-server.js\n3. Wait for "Email server running" message\n4. Try sending the invoice again`,
+          message: `Cannot connect to email server at ${import.meta.env.VITE_EMAIL_SERVER_URL}.\n\nPlease make sure the email server is running:\n1. Open terminal\n2. Run: cd backend && node email-server.js\n3. Wait for "Email server running" message\n4. Try sending the invoice again`,
         };
       }
       
