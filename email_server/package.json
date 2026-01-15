@@ -2,12 +2,12 @@
   "name": "ubs-email-server",
   "version": "1.0.0",
   "description": "Simple email server for cPanel SMTP",
-  "main": "email-server.js",
+  "main": "app.cjs",
   "scripts": {
-    "start": "node email-server.js",
-    "dev": "nodemon email-server.js",
-    "restart": "pkill -f 'email-server.js' 2>/dev/null; pkill -f 'app.cjs' 2>/dev/null; lsof -ti:3001 | xargs kill -9 2>/dev/null; sleep 1; node email-server.js",
-    "kill": "pkill -f 'email-server.js' 2>/dev/null; pkill -f 'app.cjs' 2>/dev/null; lsof -ti:3001 | xargs kill -9 2>/dev/null; echo '✅ Killed all email server processes'"
+    "start": "node app.cjs",
+    "dev": "nodemon app.cjs",
+    "restart": "pkill -f 'app.cjs' 2>/dev/null; pkill -f 'app.cjs' 2>/dev/null; lsof -ti:3001 | xargs kill -9 2>/dev/null; sleep 1; node app.cjs",
+    "kill": "pkill -f 'app.cjs' 2>/dev/null; pkill -f 'app.cjs' 2>/dev/null; lsof -ti:3001 | xargs kill -9 2>/dev/null; echo '✅ Killed all email server processes'"
   },
   "dependencies": {
     "cors": "^2.8.5",

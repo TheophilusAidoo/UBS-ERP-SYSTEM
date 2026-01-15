@@ -7,7 +7,7 @@ const nodemailer = require('nodemailer');
 const cors = require('cors');
 
 const app = express();
-const PORT = process.env.PORT || 3001; // Email server port (different from frontend)
+const PORT = process.env.PORT || 3000; // Email server port (different from frontend)
 
 // CORS configuration - allow all origins for development
 app.use(cors({
