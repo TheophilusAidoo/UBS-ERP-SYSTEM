@@ -92,6 +92,7 @@ const StaffManagementScreen: React.FC = () => {
     new: false,
     confirm: false,
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [editingStaff, setEditingStaff] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -799,13 +800,26 @@ const StaffManagementScreen: React.FC = () => {
             {!editingStaff && (
               <TextField
                 label={t('auth.password')}
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 fullWidth
                 required
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 placeholder="Enter password"
                 helperText="Minimum 6 characters"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setShowPassword(!showPassword)}
+                        edge="end"
+                        size="small"
+                      >
+                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
               />
             )}
             <Box sx={{ display: 'flex', gap: 2 }}>

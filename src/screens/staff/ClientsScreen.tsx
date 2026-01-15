@@ -74,6 +74,7 @@ const ClientsScreen: React.FC = () => {
   const [allStaff, setAllStaff] = useState<User[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [showPassword, setShowPassword] = useState(false);
 
   const [formData, setFormData] = useState({
     companyId: user?.companyId || '',
@@ -584,7 +585,7 @@ const ClientsScreen: React.FC = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 label="Password (Optional - for client login)"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 fullWidth
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -594,6 +595,17 @@ const ClientsScreen: React.FC = () => {
                   startAdornment: (
                     <InputAdornment position="start">
                       <Lock sx={{ fontSize: 20, color: 'text.secondary' }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setShowPassword(!showPassword)}
+                        edge="end"
+                        size="small"
+                      >
+                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
                     </InputAdornment>
                   ),
                 }}

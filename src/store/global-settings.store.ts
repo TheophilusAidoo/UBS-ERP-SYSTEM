@@ -91,6 +91,70 @@ const parseSetting = (key: string, value: string | null, defaultValue: any): any
   return value;
 };
 
+// Helper to safely store in localStorage with quota checking
+const safeSetItem = (key: string, value: string): boolean => {
+  try {
+    // Check if value is too large (localStorage limit is typically 5-10MB)
+    // If value is larger than 1MB, skip caching to prevent quota issues
+    const sizeInBytes = new Blob([value]).size;
+    const sizeInMB = sizeInBytes / (1024 * 1024);
+    
+    if (sizeInMB > 1) {
+      console.warn(`⚠️ Skipping cache for ${key}: value too large (${sizeInMB.toFixed(2)}MB)`);
+      return false;
+    }
+    
+    localStorage.setItem(key, value);
+    return true;
+  } catch (error: any) {
+    if (error.name === 'QuotaExceededError') {
+      console.warn(`⚠️ Storage quota exceeded for ${key}. Attempting to clear old cache...`);
+      
+      // Try to clear old cache entries
+      try {
+        const keysToRemove = [
+          'ubs_erp_global_settings_cache',
+          'ubs_erp_global_settings_cache_timestamp',
+        ];
+        
+        keysToRemove.forEach(k => {
+          if (k !== key) {
+            localStorage.removeItem(k);
+          }
+        });
+        
+        // Retry storing
+        localStorage.setItem(key, value);
+        return true;
+      } catch (retryError) {
+        console.error(`❌ Failed to store ${key} after clearing cache:`, retryError);
+        return false;
+      }
+    }
+    console.error(`❌ Error storing ${key}:`, error);
+    return false;
+  }
+};
+
+// Helper to create a cache-safe version of settings (exclude large image data)
+const createCacheSafeSettings = (settings: Record<string, string | null>): Record<string, string | null> => {
+  const cacheSafe: Record<string, string | null> = {};
+  const imageKeys = ['login_background_image', 'login_logo', 'sidebar_logo', 'favicon'];
+  
+  Object.entries(settings).forEach(([key, value]) => {
+    // Skip large image data from cache
+    if (imageKeys.includes(key) && value && value.length > 10000) {
+      // Only skip if it's a large base64 string
+      if (value.startsWith('data:image') || value.length > 50000) {
+        return; // Skip this key
+      }
+    }
+    cacheSafe[key] = value;
+  });
+  
+  return cacheSafe;
+};
+
 const initialState = {
   currency: 'USD' as Currency,
   currencySymbol: '$',
@@ -119,8 +183,16 @@ export const useGlobalSettingsStore = create<GlobalSettings>((set) => ({
       const cacheTimestampKey = 'ubs_erp_global_settings_cache_timestamp';
       const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
       
-      const cachedTimestamp = localStorage.getItem(cacheTimestampKey);
-      const cachedSettings = localStorage.getItem(cacheKey);
+      let cachedTimestamp: string | null = null;
+      let cachedSettings: string | null = null;
+      
+      try {
+        cachedTimestamp = localStorage.getItem(cacheTimestampKey);
+        cachedSettings = localStorage.getItem(cacheKey);
+      } catch (e) {
+        // Storage read error, continue to fetch fresh
+        console.warn('⚠️ Could not read cache, fetching fresh settings');
+      }
       
       if (cachedSettings && cachedTimestamp) {
         const age = Date.now() - parseInt(cachedTimestamp, 10);
@@ -147,8 +219,12 @@ export const useGlobalSettingsStore = create<GlobalSettings>((set) => ({
             // Refresh in background without blocking UI
             globalSettingsService.getAllSettings().then(settings => {
               if (Object.keys(settings).length > 0) {
-                localStorage.setItem(cacheKey, JSON.stringify(settings));
-                localStorage.setItem(cacheTimestampKey, Date.now().toString());
+                // Use cache-safe version and safe storage
+                const cacheSafe = createCacheSafeSettings(settings);
+                const cacheData = JSON.stringify(cacheSafe);
+                safeSetItem(cacheKey, cacheData);
+                safeSetItem(cacheTimestampKey, Date.now().toString());
+                
                 set({
                   currency: (parseSetting('currency', settings.currency, 'USD') as Currency),
                   currencySymbol: parseSetting('currency_symbol', settings.currency_symbol, '$'),
@@ -171,6 +247,7 @@ export const useGlobalSettingsStore = create<GlobalSettings>((set) => ({
             return;
           } catch (e) {
             // Cache parse error, continue to fetch fresh
+            console.warn('⚠️ Cache parse error, fetching fresh settings');
           }
         }
       }
@@ -179,9 +256,11 @@ export const useGlobalSettingsStore = create<GlobalSettings>((set) => ({
       const settings = await globalSettingsService.getAllSettings();
       
       if (Object.keys(settings).length > 0) {
-        // Cache settings for faster next load
-        localStorage.setItem(cacheKey, JSON.stringify(settings));
-        localStorage.setItem(cacheTimestampKey, Date.now().toString());
+        // Use cache-safe version and safe storage
+        const cacheSafe = createCacheSafeSettings(settings);
+        const cacheData = JSON.stringify(cacheSafe);
+        safeSetItem(cacheKey, cacheData);
+        safeSetItem(cacheTimestampKey, Date.now().toString());
         
         set({
           currency: (parseSetting('currency', settings.currency, 'USD') as Currency),

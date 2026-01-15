@@ -37,6 +37,7 @@ import {
   Business,
   Person,
   Visibility,
+  VisibilityOff,
   Add,
   Edit,
   Delete,
@@ -68,6 +69,7 @@ const AdminClientsScreen: React.FC = () => {
   });
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<string>('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const [formData, setFormData] = useState({
     companyId: '',
@@ -584,7 +586,7 @@ const AdminClientsScreen: React.FC = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 label={`${t('adminClients.password')} (${t('common.optional') || 'Optional'})`}
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 fullWidth
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -593,6 +595,17 @@ const AdminClientsScreen: React.FC = () => {
                   startAdornment: (
                     <InputAdornment position="start">
                       <Lock sx={{ fontSize: 20, color: 'text.secondary' }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setShowPassword(!showPassword)}
+                        edge="end"
+                        size="small"
+                      >
+                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
                     </InputAdornment>
                   ),
                 }}

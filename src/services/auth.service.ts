@@ -203,6 +203,104 @@ class AuthService {
             loginError.message.includes('Invalid password') ||
             loginError.message.includes('User not found') ||
             loginError.message.includes('Email rate limit exceeded')) {
+          
+          // Try to auto-create auth user if profile exists in database
+          console.log('⚠️ Invalid credentials - checking if profile exists in database...');
+          const adminClient = getAdminClient();
+          
+          if (adminClient) {
+            try {
+              // Check if user profile exists in database
+              const { data: existingProfile, error: profileCheckError } = await adminClient
+                .from(TABLES.users)
+                .select('id, email, role, first_name, last_name')
+                .ilike('email', normalizedEmail)
+                .maybeSingle();
+              
+              if (existingProfile && !profileCheckError) {
+                console.log('✅ Profile exists in database! Checking if auth user exists...');
+                
+                // Check if auth user exists
+                const { data: authUsersList, error: listError } = await adminClient.auth.admin.listUsers();
+                const authUserExists = authUsersList?.users?.some((u: any) => 
+                  u.email?.toLowerCase().trim() === normalizedEmail
+                );
+                
+                if (!authUserExists) {
+                  console.log('⚠️ Auth user does not exist, creating it...');
+                  
+                  // Create auth user with the password user entered
+                  const { data: authUserData, error: createAuthError } = await adminClient.auth.admin.createUser({
+                    email: normalizedEmail,
+                    password: normalizedPassword,
+                    email_confirm: true,
+                    user_metadata: {
+                      role: existingProfile.role,
+                      first_name: existingProfile.first_name || 'Admin',
+                      last_name: existingProfile.last_name || 'User',
+                    },
+                  });
+                  
+                  if (!createAuthError && authUserData?.user) {
+                    console.log('✅ Auth user created successfully!');
+                    
+                    // Update profile ID to match auth user ID if they don't match
+                    if (existingProfile.id !== authUserData.user.id) {
+                      console.log('⚠️ Profile ID mismatch, updating profile ID...');
+                      await adminClient
+                        .from(TABLES.users)
+                        .update({ id: authUserData.user.id })
+                        .eq('id', existingProfile.id);
+                    }
+                    
+                    // Retry login with the newly created auth user
+                    console.log('🔄 Retrying login after creating auth user...');
+                    const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
+                      email: normalizedEmail,
+                      password: normalizedPassword,
+                    });
+                    
+                    if (!retryError && retryData?.user && retryData?.session) {
+                      console.log('✅ Login successful after creating auth user!');
+                      loginData = retryData;
+                      loginError = null;
+                      // Continue with normal flow below
+                    } else {
+                      throw new Error(`Auth user created but login failed: ${retryError?.message || 'Unknown error'}`);
+                    }
+                  } else if (createAuthError?.message?.includes('already registered') || createAuthError?.message?.includes('already exists')) {
+                    // Auth user exists but password is wrong
+                    console.log('⚠️ Auth user exists but password is incorrect');
+                    if (credentials.email === 'admin@ubs.com') {
+                      throw new Error('❌ Wrong password for admin@ubs.com!\n\n🔧 To fix:\n1. Go to Supabase Dashboard > Authentication > Users\n2. Find admin@ubs.com\n3. Click "..." > "Reset Password"\n4. Set new password\n5. Try logging in again');
+                    }
+                    throw new Error('❌ Wrong password!\n\nPlease reset your password in Supabase Dashboard > Authentication > Users');
+                  } else {
+                    throw createAuthError || new Error('Failed to create auth user');
+                  }
+                } else {
+                  // Auth user exists but password is wrong
+                  console.log('⚠️ Auth user exists but password is incorrect');
+                  if (credentials.email === 'admin@ubs.com') {
+                    throw new Error('❌ Wrong password for admin@ubs.com!\n\n🔧 To fix:\n1. Go to Supabase Dashboard > Authentication > Users\n2. Find admin@ubs.com\n3. Click "..." > "Reset Password"\n4. Set new password\n5. Try logging in again');
+                  }
+                  throw new Error('❌ Wrong password!\n\nPlease reset your password in Supabase Dashboard > Authentication > Users');
+                }
+              } else {
+                // Profile doesn't exist in database
+                console.log('⚠️ Profile not found in database');
+                if (credentials.email === 'admin@ubs.com') {
+                  throw new Error('❌ Admin user not found!\n\n🔧 To fix:\n1. Go to Supabase Dashboard > Authentication > Users\n2. Create user:\n   - Email: admin@ubs.com\n   - Password: test123 (or your preferred)\n   - ✅ Check "Auto Confirm User"\n3. Then create profile in Table Editor > users with matching ID');
+                }
+                throw new Error('❌ User not found!\n\nPlease create the user in Supabase Dashboard > Authentication > Users first.');
+              }
+            } catch (autoCreateError: any) {
+              console.error('❌ Error during auto-create auth user:', autoCreateError);
+              // Fall through to show error message below
+            }
+          }
+          
+          // If we get here, auto-create didn't work or admin client not available
           // Check if this is the admin user and provide specific guidance
           if (credentials.email === 'admin@ubs.com') {
             throw new Error('❌ Wrong password for admin@ubs.com!\n\n🔧 To fix:\n1. Go to Supabase Dashboard > Authentication > Users\n2. Find admin@ubs.com\n3. Click "..." > "Reset Password"\n4. Set new password\n5. Try logging in again\n\n💡 If user doesn\'t exist, create it:\n1. Click "Add User" > "Create new user"\n2. Email: admin@ubs.com\n3. Password: test123 (or your preferred)\n4. ✅ Check "Auto Confirm User"\n5. Click "Create User"');
@@ -230,18 +328,21 @@ class AuthService {
       // Use admin client to bypass RLS for login check (safe - only verifying identity)
       console.log('🔍 Checking if user is a client...', { authUserId: loginData.user.id, email: credentials.email });
       
-      // Try to use admin client to bypass RLS (for login verification only)
+      // ALWAYS try to get admin client for profile lookup (bypasses RLS)
       const adminClient = getAdminClient();
+      if (!adminClient) {
+        console.warn('⚠️ Admin client not available - profile lookup may fail due to RLS. Set VITE_SUPABASE_SERVICE_ROLE_KEY in .env');
+      }
       const clientSupabase = adminClient || supabase; // Use admin client if available, fallback to regular
       
-      console.log('🔍 Using', adminClient ? 'admin client (bypasses RLS)' : 'regular client (subject to RLS)');
+      console.log('🔍 Using', adminClient ? 'admin client (bypasses RLS)' : 'regular client (subject to RLS)', 'for client check');
       
       // Try to find client by auth_user_id first, then by email
       let clientProfile: any = null;
       let clientError: any = null;
       
       // First attempt: by auth_user_id
-      const { data: clientById, error: errorById } = await clientSupabase
+      const { data: clientById, error: clientErrorById } = await clientSupabase
         .from(TABLES.clients)
         .select(`
           *,
@@ -251,14 +352,14 @@ class AuthService {
         .eq('is_active', true)
         .maybeSingle();
       
-      if (clientById && !errorById) {
+      if (clientById && !clientErrorById) {
         clientProfile = clientById;
         console.log('✅ Client found by auth_user_id');
       } else {
         // Second attempt: by email (case-insensitive, normalized)
-        console.log('🔍 Client not found by auth_user_id, trying email...', errorById?.message);
+        console.log('🔍 Client not found by auth_user_id, trying email...', clientErrorById?.message);
         const normalizedEmail = credentials.email.trim().toLowerCase();
-        const { data: clientByEmail, error: errorByEmail } = await clientSupabase
+        const { data: clientByEmail, error: clientErrorByEmail } = await clientSupabase
           .from(TABLES.clients)
           .select(`
             *,
@@ -268,14 +369,14 @@ class AuthService {
           .eq('is_active', true)
           .maybeSingle();
         
-        if (clientByEmail && !errorByEmail) {
+        if (clientByEmail && !clientErrorByEmail) {
           clientProfile = clientByEmail;
           console.log('✅ Client found by email');
         } else {
-          clientError = errorByEmail || errorById;
+          clientError = clientErrorByEmail || clientErrorById;
           console.log('ℹ️ Client not found:', {
-            byId: errorById?.message,
-            byEmail: errorByEmail?.message,
+            byId: clientErrorById?.message,
+            byEmail: clientErrorByEmail?.message,
             usingAdminClient: !!adminClient
           });
         }
@@ -346,109 +447,226 @@ class AuthService {
       }
 
       // If not a client, fetch user profile from users table
+      // CRITICAL: Use admin client to bypass RLS for login verification
       console.log('📋 Fetching user profile from users table...');
-      const { data: userProfile, error: profileError } = await supabase
+      console.log('📋 Auth User ID:', loginData.user.id);
+      console.log('📋 Email:', normalizedEmail);
+      
+      // ALWAYS use admin client if available for profile lookup (bypasses RLS)
+      const profileSupabase = adminClient || supabase;
+      console.log('🔍 Using', adminClient ? 'admin client (bypasses RLS)' : 'regular client (subject to RLS)', 'for profile lookup');
+      
+      if (!adminClient) {
+        console.warn('⚠️ WARNING: Admin client not available! Profile lookup may fail due to RLS policies.');
+        console.warn('⚠️ Set VITE_SUPABASE_SERVICE_ROLE_KEY in your .env file to fix this.');
+      }
+      
+      // PRIORITY: Try by email FIRST (email is unique and doesn't depend on ID matching)
+      // This handles cases where auth user ID doesn't match profile ID
+      let userProfile: any = null;
+      let profileError: any = null;
+      
+      console.log('🔍 Attempting to fetch profile by email (primary method):', normalizedEmail);
+      const { data: profileByEmail, error: profileErrorByEmail } = await profileSupabase
         .from(TABLES.users)
         .select(`
           *,
           company:companies(*)
         `)
-        .eq('id', loginData.user.id)
+        .ilike('email', normalizedEmail)
         .maybeSingle();
+      
+      console.log('📥 Profile by email result:', {
+        hasData: !!profileByEmail,
+        hasError: !!profileErrorByEmail,
+        error: profileErrorByEmail?.message,
+        profileId: profileByEmail?.id,
+        profileEmail: profileByEmail?.email,
+        authUserId: loginData.user.id,
+        idsMatch: profileByEmail?.id === loginData.user.id
+      });
+      
+      if (profileByEmail && !profileErrorByEmail) {
+        userProfile = profileByEmail;
+        console.log('✅ User profile found by email:', userProfile.email, userProfile.role);
+        
+        // If found by email but ID doesn't match, use profile but update ID to match auth user
+        // This ensures session consistency - we use the profile data but with auth user ID
+        if (profileByEmail.id !== loginData.user.id) {
+          console.warn('⚠️ Profile ID mismatch detected!', {
+            profileId: profileByEmail.id,
+            authUserId: loginData.user.id,
+            email: normalizedEmail
+          });
+          console.warn('⚠️ Using profile from database but updating ID to match auth user for session consistency.');
+          // Update the profile ID to match auth user ID for session consistency
+          userProfile.id = loginData.user.id;
+        }
+      } else {
+        // Fallback: Try by ID in case email lookup failed
+        console.log('⚠️ Profile not found by email, trying by ID...', profileErrorByEmail?.message);
+        profileError = profileErrorByEmail;
+        
+        console.log('🔍 Attempting to fetch profile by ID:', loginData.user.id);
+        const { data: profileById, error: profileErrorById } = await profileSupabase
+          .from(TABLES.users)
+          .select(`
+            *,
+            company:companies(*)
+          `)
+          .eq('id', loginData.user.id)
+          .maybeSingle();
+        
+        console.log('📥 Profile by ID result:', {
+          hasData: !!profileById,
+          hasError: !!profileErrorById,
+          error: profileErrorById?.message,
+          profileId: profileById?.id,
+          profileEmail: profileById?.email
+        });
+        
+        if (profileById && !profileErrorById) {
+          userProfile = profileById;
+          console.log('✅ User profile found by ID:', userProfile.email, userProfile.role);
+        } else {
+          profileError = profileErrorByEmail || profileErrorById;
+          console.log('❌ Profile not found by ID either:', profileErrorById?.message);
+          console.log('❌ All profile lookup attempts failed. Error details:', {
+            byEmail: profileErrorByEmail?.message,
+            byId: profileErrorById?.message,
+            usingAdminClient: !!adminClient,
+            authUserId: loginData.user.id,
+            email: normalizedEmail
+          });
+          
+          // If admin client is not available and we got an RLS error, provide helpful message
+          if (!adminClient && (profileErrorById?.message?.includes('policy') || profileErrorById?.message?.includes('RLS') || profileErrorById?.code === '42501' || profileErrorByEmail?.message?.includes('policy') || profileErrorByEmail?.message?.includes('RLS') || profileErrorByEmail?.code === '42501')) {
+            throw new Error(`❌ Cannot access user profile due to RLS policies!\n\n🔧 To fix:\n1. Set VITE_SUPABASE_SERVICE_ROLE_KEY in your .env file\n2. Get it from: Supabase Dashboard > Settings > API > service_role key\n3. Restart your dev server\n4. Try logging in again\n\nOR manually create the profile:\n1. Go to Supabase Dashboard > Table Editor > users\n2. Add row with:\n   - id: ${loginData.user.id}\n   - email: ${normalizedEmail}\n   - role: ${normalizedEmail === 'admin@ubs.com' ? 'admin' : 'staff'}\n3. Save and try again`);
+          }
+        }
+      }
+
+      // If we have a profile, use it (even if there was an error, the profile is what matters)
+      if (userProfile) {
+        console.log('✅ User profile found:', userProfile.email, userProfile.role);
+        const mappedUser = mapUserFromDB(userProfile) as User;
+        
+        // Check if user is banned (only for staff, not admins)
+        if (mappedUser.role === 'staff' && mappedUser.isBanned) {
+          // Sign out the user immediately
+          await supabase.auth.signOut();
+          throw new Error('❌ Your account has been banned. Please contact your administrator for more information.');
+        }
+        
+        return {
+          user: mappedUser,
+          session: loginData.session,
+        };
+      }
 
       // Handle profile not found - try auto-create with retry
-      if (!userProfile || profileError) {
-        console.log('⚠️ User profile not found, attempting to create it...');
-        
-        // Determine role based on email
-        const userRole = normalizedEmail === 'admin@ubs.com' ? 'admin' : 'staff';
-        
-        // Try with admin client first, then regular client
-        let newProfile = null;
-        let createError = null;
-        
-        // First attempt: Use admin client if available
-        const adminClient = getAdminClient();
-        if (adminClient) {
-          try {
-            const { data, error } = await adminClient
-              .from(TABLES.users)
-              .insert({
-                id: loginData.user.id,
-                email: normalizedEmail,
-                role: userRole,
-                first_name: loginData.user.user_metadata?.first_name || '',
-                last_name: loginData.user.user_metadata?.last_name || '',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              })
-              .select()
-              .maybeSingle();
-            
-            if (!error && data) {
-              newProfile = data;
-            } else {
-              createError = error;
-            }
-          } catch (err: any) {
-            createError = err;
+      // Only proceed to auto-create if we truly don't have a profile
+      console.log('⚠️ User profile not found, attempting to create it...', {
+        hasProfile: !!userProfile,
+        error: profileError?.message,
+        userId: loginData.user.id,
+        email: normalizedEmail
+      });
+      
+      // Determine role based on email
+      const userRole = normalizedEmail === 'admin@ubs.com' ? 'admin' : 'staff';
+      
+      // Try with admin client first, then regular client
+      let newProfile = null;
+      let createError = null;
+      
+      // First attempt: Use admin client if available (already fetched above)
+      if (adminClient) {
+        try {
+          console.log('🔧 Attempting to auto-create profile with admin client...');
+          const { data, error } = await adminClient
+            .from(TABLES.users)
+            .insert({
+              id: loginData.user.id,
+              email: normalizedEmail,
+              role: userRole,
+              first_name: loginData.user.user_metadata?.first_name || (userRole === 'admin' ? 'Admin' : 'Staff'),
+              last_name: loginData.user.user_metadata?.last_name || 'User',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .select()
+            .maybeSingle();
+          
+          console.log('📥 Auto-create result:', {
+            hasData: !!data,
+            hasError: !!error,
+            error: error?.message,
+            profileId: data?.id
+          });
+          
+          if (!error && data) {
+            newProfile = data;
+            console.log('✅ Profile auto-created successfully:', newProfile.email, newProfile.role);
+          } else {
+            createError = error;
+            console.error('❌ Failed to auto-create profile:', error?.message);
           }
+        } catch (err: any) {
+          createError = err;
+          console.error('❌ Exception during auto-create:', err?.message);
         }
-        
-        // Second attempt: Use regular client if admin client failed
-        if (!newProfile && !createError) {
-          try {
-            const { data, error } = await supabase
-              .from(TABLES.users)
-              .insert({
-                id: loginData.user.id,
-                email: normalizedEmail,
-                role: userRole,
-                first_name: loginData.user.user_metadata?.first_name || '',
-                last_name: loginData.user.user_metadata?.last_name || '',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              })
-              .select()
-              .maybeSingle();
-            
-            if (!error && data) {
-              newProfile = data;
-            } else {
-              createError = error;
-            }
-          } catch (err: any) {
-            createError = err;
+      } else {
+        console.warn('⚠️ Admin client not available - cannot auto-create profile');
+        createError = new Error('Admin client not available. Set VITE_SUPABASE_SERVICE_ROLE_KEY in .env');
+      }
+      
+      // Second attempt: Use regular client if admin client failed
+      if (!newProfile && !createError) {
+        try {
+          const { data, error } = await supabase
+            .from(TABLES.users)
+            .insert({
+              id: loginData.user.id,
+              email: normalizedEmail,
+              role: userRole,
+              first_name: loginData.user.user_metadata?.first_name || '',
+              last_name: loginData.user.user_metadata?.last_name || '',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .select()
+            .maybeSingle();
+          
+          if (!error && data) {
+            newProfile = data;
+          } else {
+            createError = error;
           }
+        } catch (err: any) {
+          createError = err;
+        }
+      }
+      
+      if (newProfile) {
+        console.log('✅ Auto-created user profile:', newProfile);
+        const mappedUser = mapUserFromDB(newProfile) as User;
+        return {
+          user: mappedUser,
+          session: loginData.session,
+        };
+      } else {
+        console.error('❌ Failed to auto-create user profile:', createError);
+        const errorDetails = createError?.message || createError?.code || 'Unknown error';
+        
+        // Provide specific guidance for admin user
+        if (normalizedEmail === 'admin@ubs.com') {
+          throw new Error(`❌ Admin user profile not found!\n\n🔧 To fix:\n1. Go to Supabase Dashboard > SQL Editor\n2. Run this SQL:\n\nINSERT INTO users (id, email, role, first_name, last_name, created_at, updated_at)\nVALUES ('${loginData.user.id}', '${normalizedEmail}', 'admin', 'Admin', 'User', NOW(), NOW())\nON CONFLICT (id) DO NOTHING;\n\n3. Then try logging in again.\n\nOr create manually:\n1. Supabase Dashboard > Table Editor > users\n2. Add row:\n   - id: ${loginData.user.id}\n   - email: ${normalizedEmail}\n   - role: admin\n   - first_name: Admin\n   - last_name: User\n3. Click Save\n\nError: ${errorDetails}`);
         }
         
-        if (newProfile) {
-          console.log('✅ Auto-created user profile:', newProfile);
-          const mappedUser = mapUserFromDB(newProfile) as User;
-          return {
-            user: mappedUser,
-            session: loginData.session,
-          };
-        } else {
-          console.error('❌ Failed to auto-create user profile:', createError);
-          throw new Error(`❌ User profile not found!\n\n🔧 Create manually:\n1. Supabase Dashboard > Table Editor > users\n2. Add row:\n   - id: ${loginData.user.id}\n   - email: ${normalizedEmail}\n   - role: ${userRole}\n3. Click Save\n\nThen try logging in again.`);
-        }
+        throw new Error(`❌ User profile not found!\n\n🔧 Create manually:\n1. Supabase Dashboard > Table Editor > users\n2. Add row:\n   - id: ${loginData.user.id}\n   - email: ${normalizedEmail}\n   - role: ${userRole}\n3. Click Save\n\nThen try logging in again.\n\nError: ${errorDetails}`);
       }
 
-      console.log('✅ User profile found:', userProfile.email, userProfile.role);
-      const mappedUser = mapUserFromDB(userProfile) as User;
-      
-      // Check if user is banned (only for staff, not admins)
-      if (mappedUser.role === 'staff' && mappedUser.isBanned) {
-        // Sign out the user immediately
-        await supabase.auth.signOut();
-        throw new Error('❌ Your account has been banned. Please contact your administrator for more information.');
-      }
-      
-      return {
-        user: mappedUser,
-          session: loginData.session,
-      };
     } catch (loginError: any) {
       // Re-throw if it's already a formatted error message
       if (loginError.message && loginError.message.includes('❌')) {
